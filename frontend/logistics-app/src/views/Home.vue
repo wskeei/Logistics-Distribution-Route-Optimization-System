@@ -1,35 +1,30 @@
 <template>
   <div id="main-layout">
     <div class="sidebar">
-      <h2>控制面板</h2>
+      <h2>系统仪表盘</h2>
+      <p>欢迎回来，{{ username }}！</p>
       
-      <div class="control-group">
-        <label for="locations-input">客户点坐标 (id,x,y 每行一个):</label>
-        <textarea id="locations-input" v-model="locationsInput" rows="10"></textarea>
-      </div>
+      <nav class="dashboard-nav">
+        <ul>
+          <li><router-link to="/customers">客户管理</router-link></li>
+          <li><router-link to="/tasks">任务管理</router-link></li>
+          <!-- 未来可以添加仓库和车辆管理 -->
+          <!-- <li><router-link to="/depots">仓库管理</router-link></li> -->
+          <!-- <li><router-link to="/vehicles">车辆管理</router-link></li> -->
+        </ul>
+      </nav>
 
-      <div class="control-group">
-        <label for="generations-input">最大迭代代数:</label>
-        <input type="number" id="generations-input" v-model.number="generations" />
+      <div class="overview-panel">
+        <h3>系统总览</h3>
+        <p>客户总数: {{ customerCount }}</p>
+        <p>任务总数: {{ taskCount }}</p>
+        <p>已完成任务: {{ completedTaskCount }}</p>
       </div>
-
-      <div class="control-group">
-        <label for="patience-input">收敛耐心值 (Patience):</label>
-        <input type="number" id="patience-input" v-model.number="patience" />
-      </div>
-      
-      <button @click="startOptimization" :disabled="isLoading">
-        {{ isLoading ? '计算中...' : '开始优化' }}
-      </button>
 
       <button @click="handleLogout" class="logout-button">登出</button>
-      
-      <div v-if="result" class="result-panel">
-        <h3>优化结果:</h3>
-        <p><strong>路径:</strong> {{ result.path.join(' -> ') }}</p>
-        <p><strong>总距离:</strong> {{ result.distance.toFixed(2) }}</p>
-      </div>
     </div>
+    
+    <!-- 保留地图作为可视化展示 -->
     <Map
       class="map-content"
       :locations="locations"
@@ -40,10 +35,11 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import Map from '../components/Map.vue';
 import { useAuthStore } from '../store';
+import axios from 'axios';
 
 const locationsInput = ref(
 `0,121.4737,31.2304
@@ -58,8 +54,14 @@ const result = ref(null);
 const generations = ref(500);
 const patience = ref(50);
 
+const customerCount = ref(0);
+const taskCount = ref(0);
+const completedTaskCount = ref(0);
+
 const router = useRouter();
 const authStore = useAuthStore();
+
+const username = computed(() => authStore.user?.username || '用户');
 
 // 将文本输入解析为地点对象数组
 const locations = computed(() => {
@@ -73,61 +75,31 @@ const locations = computed(() => {
     .filter(loc => !isNaN(loc.id) && !isNaN(loc.x) && !isNaN(loc.y));
 });
 
-
 const handleAddNewLocation = (newLoc) => {
-  // 生成一个新的、唯一的ID
   const existingIds = locations.value.map(l => l.id);
-  const newId = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
-  
-  const newLocationString = `\n${newId},${newLoc.x.toFixed(5)},${newLoc.y.toFixed(5)}`;
-  
-  // 追加到文本框
-  locationsInput.value += newLocationString;
-  
-  alert(`已添加新客户点 ${newId}！`);
+  const newId = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 0;
+  locationsInput.value += `\n${newId},${newLoc.x.toFixed(4)},${newLoc.y.toFixed(4)}`;
 };
 
 const startOptimization = async () => {
   if (locations.value.length < 2) {
-    alert("请输入至少两个地点（包括起点）。");
+    alert('请至少添加一个起点和一个客户点。');
     return;
   }
-  
+
   isLoading.value = true;
   result.value = null;
 
   try {
-    const response = await fetch('/api/optimize', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authStore.token}`,
-      },
-      body: JSON.stringify({
-        locations: locations.value,
-        // 可以在这里添加其他参数的输入框
-        population_size: 100,
-        generations: generations.value,
-        patience: patience.value,
-        crossover_rate: 0.85,
-        mutation_rate: 0.02,
-      }),
+    const response = await axios.post('/api/optimize', {
+      locations: locations.value,
+      generations: generations.value,
+      patience: patience.value,
     });
-
-    if (response.status === 401) {
-      // Token expired or invalid, redirect to login
-      authStore.logout();
-      return;
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    result.value = await response.json();
-
+    result.value = response.data;
   } catch (error) {
-    console.error("优化请求失败:", error);
-    alert("优化请求失败，请检查后端服务是否运行或查看控制台日志。");
+    console.error('优化失败:', error);
+    alert('优化失败，请检查输入数据或网络连接。');
   } finally {
     isLoading.value = false;
   }
@@ -135,62 +107,84 @@ const startOptimization = async () => {
 
 const handleLogout = () => {
   authStore.logout();
+  router.push('/login');
 };
+
+const fetchOverviewData = async () => {
+  try {
+    const [customersRes, tasksRes] = await Promise.all([
+      axios.get('/api/customers/'),
+      axios.get('/api/tasks/'),
+    ]);
+    customerCount.value = customersRes.data.length;
+    taskCount.value = tasksRes.data.length;
+    completedTaskCount.value = tasksRes.data.filter(task => task.status === 'COMPLETED').length;
+  } catch (error) {
+    console.error('获取总览数据失败:', error);
+  }
+};
+
+onMounted(() => {
+  fetchOverviewData();
+});
 </script>
 
-<style>
+<style scoped>
 #main-layout {
   display: flex;
-  width: 100%;
-  height: 100%;
+  height: 100vh;
 }
 
 .sidebar {
   width: 300px;
+  background-color: #f4f4f4;
   padding: 20px;
   box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-  z-index: 1000;
-  background: white;
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
-.control-group {
-  display: flex;
-  flex-direction: column;
+.sidebar h2, .sidebar h3 {
+  margin-top: 0;
 }
 
-textarea, input[type="number"] {
-  width: 100%;
-  padding: 5px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  box-sizing: border-box; /* 确保padding不会撑大宽度 */
+.dashboard-nav ul {
+  list-style: none;
+  padding: 0;
 }
 
-button {
-  padding: 10px 15px;
-  border: none;
-  background-color: #007bff;
+.dashboard-nav li {
+  margin-bottom: 10px;
+}
+
+.dashboard-nav a {
+  text-decoration: none;
+  color: #007bff;
+  font-weight: bold;
+}
+
+.dashboard-nav a:hover {
+  text-decoration: underline;
+}
+
+.overview-panel {
+  border-top: 1px solid #ccc;
+  padding-top: 15px;
+}
+
+.logout-button {
+  margin-top: auto;
+  padding: 10px;
+  background-color: #dc3545;
   color: white;
+  border: none;
   border-radius: 4px;
   cursor: pointer;
 }
 
-.logout-button {
-  background-color: #dc3545;
-}
-
-button:disabled {
-  background-color: #ccc;
-}
-
-.result-panel {
-  margin-top: 20px;
-  padding: 10px;
-  border: 1px solid #eee;
-  border-radius: 4px;
+.logout-button:hover {
+  background-color: #c82333;
 }
 
 .map-content {

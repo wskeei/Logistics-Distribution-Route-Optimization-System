@@ -8,7 +8,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from . import auth, database, models, schemas
+import auth, database, models, schemas
 
 models.Base.metadata.create_all(bind=database.engine)
 
@@ -311,6 +311,353 @@ def optimize_route(
         path=[loc.id for loc in best_chromosome.genes],
         distance=best_chromosome.fitness
     )
+
+# --- Customer CRUD Endpoints ---
+
+@app.get("/api/customers/", response_model=list[schemas.Customer])
+def read_customers(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    获取所有客户列表。
+    """
+    customers = db.query(models.Customer).offset(skip).limit(limit).all()
+    return customers
+
+@app.post("/api/customers/", response_model=schemas.Customer)
+def create_customer(
+    customer: schemas.CustomerCreate,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    创建新客户。
+    """
+    db_customer = models.Customer(**customer.model_dump())
+    db.add(db_customer)
+    db.commit()
+    db.refresh(db_customer)
+    return db_customer
+
+@app.get("/api/customers/{customer_id}", response_model=schemas.Customer)
+def read_customer(
+    customer_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    获取单个客户详情。
+    """
+    db_customer = db.query(models.Customer).filter(models.Customer.id == customer_id).first()
+    if db_customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    return db_customer
+
+@app.put("/api/customers/{customer_id}", response_model=schemas.Customer)
+def update_customer(
+    customer_id: int,
+    customer: schemas.CustomerUpdate,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    更新客户信息。
+    """
+    db_customer = db.query(models.Customer).filter(models.Customer.id == customer_id).first()
+    if db_customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    update_data = customer.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_customer, key, value)
+    
+    db.commit()
+    db.refresh(db_customer)
+    return db_customer
+
+@app.delete("/api/customers/{customer_id}", response_model=schemas.Customer)
+def delete_customer(
+    customer_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    删除客户。
+    """
+    db_customer = db.query(models.Customer).filter(models.Customer.id == customer_id).first()
+    if db_customer is None:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    db.delete(db_customer)
+    db.commit()
+    return db_customer
+
+# --- Depot CRUD Endpoints ---
+
+@app.get("/api/depots/", response_model=list[schemas.Depot])
+def read_depots(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    获取所有仓库列表。
+    """
+    depots = db.query(models.Depot).offset(skip).limit(limit).all()
+    return depots
+
+@app.post("/api/depots/", response_model=schemas.Depot)
+def create_depot(
+    depot: schemas.DepotCreate,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    创建新仓库。
+    """
+    db_depot = models.Depot(**depot.model_dump())
+    db.add(db_depot)
+    db.commit()
+    db.refresh(db_depot)
+    return db_depot
+
+@app.get("/api/depots/{depot_id}", response_model=schemas.Depot)
+def read_depot(
+    depot_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    获取单个仓库详情。
+    """
+    db_depot = db.query(models.Depot).filter(models.Depot.id == depot_id).first()
+    if db_depot is None:
+        raise HTTPException(status_code=404, detail="Depot not found")
+    return db_depot
+
+@app.put("/api/depots/{depot_id}", response_model=schemas.Depot)
+def update_depot(
+    depot_id: int,
+    depot: schemas.DepotUpdate,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    更新仓库信息。
+    """
+    db_depot = db.query(models.Depot).filter(models.Depot.id == depot_id).first()
+    if db_depot is None:
+        raise HTTPException(status_code=404, detail="Depot not found")
+    
+    update_data = depot.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_depot, key, value)
+    
+    db.commit()
+    db.refresh(db_depot)
+    return db_depot
+
+@app.delete("/api/depots/{depot_id}", response_model=schemas.Depot)
+def delete_depot(
+    depot_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    删除仓库。
+    """
+    db_depot = db.query(models.Depot).filter(models.Depot.id == depot_id).first()
+    if db_depot is None:
+        raise HTTPException(status_code=404, detail="Depot not found")
+    
+    db.delete(db_depot)
+    db.commit()
+    return db_depot
+
+# --- Vehicle CRUD Endpoints ---
+
+@app.get("/api/vehicles/", response_model=list[schemas.Vehicle])
+def read_vehicles(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    获取所有车辆列表。
+    """
+    vehicles = db.query(models.Vehicle).offset(skip).limit(limit).all()
+    return vehicles
+
+@app.post("/api/vehicles/", response_model=schemas.Vehicle)
+def create_vehicle(
+    vehicle: schemas.VehicleCreate,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    创建新车辆。
+    """
+    db_vehicle = models.Vehicle(**vehicle.model_dump())
+    db.add(db_vehicle)
+    db.commit()
+    db.refresh(db_vehicle)
+    return db_vehicle
+
+@app.get("/api/vehicles/{vehicle_id}", response_model=schemas.Vehicle)
+def read_vehicle(
+    vehicle_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    获取单个车辆详情。
+    """
+    db_vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == vehicle_id).first()
+    if db_vehicle is None:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    return db_vehicle
+
+@app.put("/api/vehicles/{vehicle_id}", response_model=schemas.Vehicle)
+def update_vehicle(
+    vehicle_id: int,
+    vehicle: schemas.VehicleUpdate,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    更新车辆信息。
+    """
+    db_vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == vehicle_id).first()
+    if db_vehicle is None:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    
+    update_data = vehicle.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_vehicle, key, value)
+    
+    db.commit()
+    db.refresh(db_vehicle)
+    return db_vehicle
+
+@app.delete("/api/vehicles/{vehicle_id}", response_model=schemas.Vehicle)
+def delete_vehicle(
+    vehicle_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    删除车辆。
+    """
+    db_vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == vehicle_id).first()
+    if db_vehicle is None:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    
+    db.delete(db_vehicle)
+    db.commit()
+    return db_vehicle
+
+# --- Task Creation & Optimization Endpoint ---
+
+@app.post("/api/tasks/optimize", response_model=schemas.Task)
+def create_and_optimize_task(
+    task_create: schemas.TaskCreate,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    创建一个新任务，从数据库读取仓库和客户信息，执行路径优化，并将结果保存为任务。
+    """
+    # 1. 验证仓库是否存在
+    depot = db.query(models.Depot).filter(models.Depot.id == task_create.depot_id).first()
+    if not depot:
+        raise HTTPException(status_code=404, detail="Depot not found")
+
+    # 2. 验证客户是否存在
+    customers = db.query(models.Customer).filter(models.Customer.id.in_(task_create.customer_ids)).all()
+    if len(customers) != len(task_create.customer_ids):
+        raise HTTPException(status_code=404, detail="One or more customers not found")
+    
+    if not customers:
+        raise HTTPException(status_code=400, detail="At least one customer is required for optimization")
+
+    # 3. 创建任务记录
+    db_task = models.Task(
+        depot_id=task_create.depot_id,
+        vehicle_id=task_create.vehicle_id,
+        status=models.TaskStatus.PENDING
+    )
+    db.add(db_task)
+    db.commit()
+    db.refresh(db_task) # Need ID for TaskStop creation
+
+    # 4. 准备用于优化的地点列表
+    locations_for_optimization = [
+        Location(id=depot.id, x=depot.x, y=depot.y)
+    ]
+    for customer in customers:
+        locations_for_optimization.append(Location(id=customer.id, x=customer.x, y=customer.y))
+
+    # 5. 执行遗传算法优化
+    ga = GeneticAlgorithm(
+        locations=locations_for_optimization,
+        population_size=50, # Default values for now
+        mutation_rate=0.01,
+        crossover_rate=0.85,
+        generations=500,
+        patience=50
+    )
+    best_chromosome = ga.run()
+
+    # 6. 保存优化结果到任务
+    db_task.total_distance = best_chromosome.fitness
+    db_task.status = models.TaskStatus.COMPLETED
+
+    # 7. 保存路径中的站点顺序
+    for order, loc in enumerate(best_chromosome.genes[1:], start=1): # Skip depot (first element)
+        task_stop = models.TaskStop(
+            task_id=db_task.id,
+            customer_id=loc.id,
+            stop_order=order
+        )
+        db.add(task_stop)
+    
+    db.commit()
+    db.refresh(db_task)
+    return db_task
+
+# --- Task CRUD Endpoints (Basic) ---
+
+@app.get("/api/tasks/", response_model=list[schemas.Task])
+def read_tasks(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    获取所有任务列表。
+    """
+    tasks = db.query(models.Task).offset(skip).limit(limit).all()
+    return tasks
+
+@app.get("/api/tasks/{task_id}", response_model=schemas.Task)
+def read_task(
+    task_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    获取单个任务详情。
+    """
+    db_task = db.query(models.Task).filter(models.Task.id == task_id).first()
+    if db_task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return db_task
 
 # 运行服务器的命令 (在终端中):
 # uvicorn backend.main:app --reload
