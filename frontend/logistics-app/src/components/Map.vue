@@ -52,6 +52,18 @@ onMounted(() => {
     // 监听地图点击事件
     map.value.on('click', onMapClick);
 
+    // 修复地图尺寸自适应问题
+    setTimeout(() => {
+      map.value.invalidateSize();
+    }, 100);
+
+    // 监听窗口大小变化
+    window.addEventListener('resize', () => {
+      if (map.value) {
+        map.value.invalidateSize();
+      }
+    });
+
   } catch (error) {
     console.error("FATAL: Failed to initialize map:", error);
   }

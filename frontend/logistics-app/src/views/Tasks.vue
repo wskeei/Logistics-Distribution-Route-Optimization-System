@@ -1,250 +1,205 @@
 <template>
   <div class="tasks-container">
-    <h1>任务管理</h1>
-
-    <!-- 创建新任务表单 -->
-    <div class="form-section">
-      <h2>创建新任务</h2>
-      <form @submit.prevent="createTask">
-        <div>
-          <label for="depot">选择仓库:</label>
-          <select id="depot" v-model="newTask.depot_id" required>
-            <option disabled value="">请选择仓库</option>
-            <option v-for="depot in depots" :key="depot.id" :value="depot.id">
-              {{ depot.name }} ({{ depot.address }})
-            </option>
-          </select>
+    <el-card>
+      <template #header>
+        <div class="card-header">
+          <span>任务管理</span>
+          <el-button type="primary" @click="showAddDialog = true">
+            <el-icon><Plus /></el-icon>
+            添加任务
+          </el-button>
         </div>
-        <div>
-          <label for="vehicle">选择车辆 (可选):</label>
-          <select id="vehicle" v-model="newTask.vehicle_id">
-            <option :value="null">不指定车辆</option>
-            <option v-for="vehicle in vehicles" :key="vehicle.id" :value="vehicle.id">
-              {{ vehicle.name }} (容量: {{ vehicle.capacity }})
-            </option>
-          </select>
-        </div>
-        <div>
-          <label>选择客户:</label>
-          <div class="customer-selection">
-            <label v-for="customer in customers" :key="customer.id">
-              <input type="checkbox" :value="customer.id" v-model="selectedCustomerIds" />
-              {{ customer.name }} ({{ customer.address }})
-            </label>
-          </div>
-        </div>
-        <button type="submit" :disabled="selectedCustomerIds.length === 0 || !newTask.depot_id">
-          创建并优化任务
-        </button>
-      </form>
-    </div>
+      </template>
 
-    <!-- 任务列表 -->
-    <div class="list-section">
-      <h2>任务列表</h2>
-      <table v-if="tasks.length > 0">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>创建时间</th>
-            <th>状态</th>
-            <th>仓库</th>
-            <th>车辆</th>
-            <th>总距离</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="task in tasks" :key="task.id">
-            <td>{{ task.id }}</td>
-            <td>{{ new Date(task.created_at).toLocaleString() }}</td>
-            <td>{{ task.status }}</td>
-            <td>{{ task.depot?.name || 'N/A' }}</td>
-            <td>{{ task.vehicle?.name || '未分配' }}</td>
-            <td>{{ task.total_distance ? task.total_distance.toFixed(2) : 'N/A' }}</td>
-            <td>
-              <button @click="viewTaskDetails(task.id)">查看详情</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <p v-else>暂无任务。</p>
-    </div>
+      <el-table :data="tasks" style="width: 100%" v-loading="loading">
+        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column prop="title" label="任务标题" />
+        <el-table-column prop="description" label="描述" />
+        <el-table-column prop="status" label="状态" width="100">
+          <template #default="scope">
+            <el-tag :type="getStatusType(scope.row.status)">
+              {{ getStatusText(scope.row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="created_at" label="创建时间" width="180">
+          <template #default="scope">
+            {{ formatDate(scope.row.created_at) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="200">
+          <template #default="scope">
+            <el-button 
+              size="small" 
+              :type="scope.row.status === 'COMPLETED' ? 'warning' : 'success'"
+              @click="toggleStatus(scope.row)"
+            >
+              {{ scope.row.status === 'COMPLETED' ? '标记未完成' : '标记完成' }}
+            </el-button>
+            <el-button size="small" type="danger" @click="handleDelete(scope.row)">
+              删除
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
 
-    <!-- 任务详情弹窗 -->
-    <div v-if="selectedTask" class="modal-overlay" @click="selectedTask = null">
-      <div class="modal-content" @click.stop>
-        <h3>任务详情 - ID: {{ selectedTask.id }}</h3>
-        <p><strong>状态:</strong> {{ selectedTask.status }}</p>
-        <p><strong>仓库:</strong> {{ selectedTask.depot?.name }} ({{ selectedTask.depot?.address }})</p>
-        <p><strong>车辆:</strong> {{ selectedTask.vehicle?.name || '未分配' }}</p>
-        <p><strong>总距离:</strong> {{ selectedTask.total_distance ? selectedTask.total_distance.toFixed(2) : 'N/A' }}</p>
-        <h4>配送路径:</h4>
-        <ol>
-          <li>{{ selectedTask.depot?.name }} (起点)</li>
-          <li v-for="stop in selectedTask.stops" :key="stop.id">
-            {{ stop.customer.name }} ({{ stop.customer.address }})
-          </li>
-          <li>{{ selectedTask.depot?.name }} (终点)</li>
-        </ol>
-        <button @click="selectedTask = null">关闭</button>
-      </div>
-    </div>
+    <!-- 添加任务对话框 -->
+    <el-dialog
+      v-model="showAddDialog"
+      title="添加任务"
+      width="500px"
+    >
+      <el-form :model="taskForm" label-width="80px">
+        <el-form-item label="任务标题">
+          <el-input v-model="taskForm.title" />
+        </el-form-item>
+        <el-form-item label="任务描述">
+          <el-input 
+            v-model="taskForm.description" 
+            type="textarea" 
+            :rows="4"
+          />
+        </el-form-item>
+      </el-form>
+      
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showAddDialog = false">取消</el-button>
+          <el-button type="primary" @click="handleSubmit" :loading="submitLoading">
+            添加
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
-<script>
-import axios from 'axios';
+<script setup>
+import { ref, onMounted } from 'vue'
+import axios from 'axios'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
-export default {
-  name: 'Tasks',
-  data() {
-    return {
-      depots: [],
-      vehicles: [],
-      customers: [],
-      tasks: [],
-      newTask: {
-        depot_id: '',
-        vehicle_id: null,
-      },
-      selectedCustomerIds: [],
-      selectedTask: null,
-    };
-  },
-  async mounted() {
-    await this.fetchInitialData();
-    await this.fetchTasks();
-  },
-  methods: {
-    async fetchInitialData() {
-      try {
-        const [depotsRes, vehiclesRes, customersRes] = await Promise.all([
-          axios.get('/api/depots/'),
-          axios.get('/api/vehicles/'),
-          axios.get('/api/customers/'),
-        ]);
-        this.depots = depotsRes.data;
-        this.vehicles = vehiclesRes.data;
-        this.customers = customersRes.data;
-      } catch (error) {
-        console.error('获取初始数据失败:', error);
-        alert('获取初始数据失败，请检查网络或登录状态。');
-      }
-    },
-    async fetchTasks() {
-      try {
-        const response = await axios.get('/api/tasks/');
-        this.tasks = response.data;
-      } catch (error) {
-        console.error('获取任务列表失败:', error);
-      }
-    },
-    async createTask() {
-      if (!this.newTask.depot_id || this.selectedCustomerIds.length === 0) {
-        alert('请选择仓库和至少一个客户。');
-        return;
-      }
+const tasks = ref([])
+const loading = ref(false)
+const showAddDialog = ref(false)
+const submitLoading = ref(false)
 
-      try {
-        const payload = {
-          depot_id: this.newTask.depot_id,
-          vehicle_id: this.newTask.vehicle_id,
-          customer_ids: this.selectedCustomerIds,
-        };
-        const response = await axios.post('/api/tasks/optimize', payload);
-        alert(`任务创建并优化成功！总距离: ${response.data.total_distance?.toFixed(2) || 'N/A'}`);
-        this.resetForm();
-        await this.fetchTasks();
-      } catch (error) {
-        console.error('创建任务失败:', error);
-        alert('创建任务失败，请重试。');
+const taskForm = ref({
+  title: '',
+  description: ''
+})
+
+const fetchTasks = async () => {
+  loading.value = true
+  try {
+    const response = await axios.get('/api/tasks/')
+    tasks.value = response.data
+  } catch (error) {
+    console.error('获取任务列表失败:', error)
+    ElMessage.error('获取任务列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const getStatusType = (status) => {
+  const types = {
+    'PENDING': 'warning',
+    'IN_PROGRESS': 'primary',
+    'COMPLETED': 'success'
+  }
+  return types[status] || 'info'
+}
+
+const getStatusText = (status) => {
+  const texts = {
+    'PENDING': '待处理',
+    'IN_PROGRESS': '进行中',
+    'COMPLETED': '已完成'
+  }
+  return texts[status] || status
+}
+
+const formatDate = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return date.toLocaleString('zh-CN')
+}
+
+const toggleStatus = async (task) => {
+  try {
+    const newStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED'
+    await axios.put(`/api/tasks/${task.id}`, { ...task, status: newStatus })
+    ElMessage.success('状态更新成功')
+    fetchTasks()
+  } catch (error) {
+    console.error('更新任务状态失败:', error)
+    ElMessage.error('更新任务状态失败')
+  }
+}
+
+const handleDelete = async (task) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除任务 "${task.title}" 吗？`,
+      '确认删除',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
       }
-    },
-    async viewTaskDetails(taskId) {
-      try {
-        const response = await axios.get(`/api/tasks/${taskId}`);
-        this.selectedTask = response.data;
-      } catch (error) {
-        console.error('获取任务详情失败:', error);
-        alert('获取任务详情失败。');
-      }
-    },
-    resetForm() {
-      this.newTask = { depot_id: '', vehicle_id: null };
-      this.selectedCustomerIds = [];
-    },
-  },
-};
+    )
+    
+    await axios.delete(`/api/tasks/${task.id}`)
+    ElMessage.success('删除成功')
+    fetchTasks()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除任务失败:', error)
+      ElMessage.error('删除任务失败')
+    }
+  }
+}
+
+const handleSubmit = async () => {
+  if (!taskForm.value.title.trim()) {
+    ElMessage.warning('请输入任务标题')
+    return
+  }
+
+  submitLoading.value = true
+  try {
+    await axios.post('/api/tasks/', {
+      title: taskForm.value.title,
+      description: taskForm.value.description
+    })
+    
+    ElMessage.success('添加成功')
+    showAddDialog.value = false
+    taskForm.value = { title: '', description: '' }
+    fetchTasks()
+  } catch (error) {
+    console.error('添加任务失败:', error)
+    ElMessage.error('添加任务失败')
+  } finally {
+    submitLoading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchTasks()
+})
 </script>
 
 <style scoped>
 .tasks-container {
-  max-width: 1000px;
-  margin: 0 auto;
   padding: 20px;
 }
-.form-section, .list-section {
-  margin-bottom: 30px;
-  padding: 20px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-}
-form div {
-  margin-bottom: 15px;
-}
-label {
-  display: block;
-  margin-bottom: 5px;
-  font-weight: bold;
-}
-select, button {
-  padding: 8px;
-  margin-top: 5px;
-}
-.customer-selection {
-  max-height: 200px;
-  overflow-y: auto;
-  border: 1px solid #ccc;
-  padding: 10px;
-  border-radius: 4px;
-}
-.customer-selection label {
-  display: block;
-  margin-bottom: 5px;
-  font-weight: normal;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-th, td {
-  padding: 10px;
-  border: 1px solid #ddd;
-  text-align: left;
-}
-th {
-  background-color: #f2f2f2;
-}
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
+
+.card-header {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
-  z-index: 1000;
-}
-.modal-content {
-  background: white;
-  padding: 20px;
-  border-radius: 8px;
-  max-width: 500px;
-  width: 90%;
-  max-height: 80vh;
-  overflow-y: auto;
 }
 </style>

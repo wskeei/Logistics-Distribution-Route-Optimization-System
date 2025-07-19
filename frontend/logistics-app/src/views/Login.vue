@@ -1,91 +1,211 @@
 <template>
   <div class="login-container">
     <div class="login-box">
-      <h2>登录</h2>
-      <form @submit.prevent="handleLogin">
-        <div class="input-group">
-          <label for="username">用户名</label>
-          <input type="text" id="username" v-model="username" required>
-        </div>
-        <div class="input-group">
-          <label for="password">密码</label>
-          <input type="password" id="password" v-model="password" required>
-        </div>
-        <p v-if="error" class="error-message">{{ error }}</p>
-        <button type="submit">登录</button>
-      </form>
-      <p class="register-prompt">
-        还没有账户? <a href="#" @click.prevent="isRegistering = true">立即注册</a>
-      </p>
-    </div>
-
-    <!-- Registration Modal -->
-    <div v-if="isRegistering" class="modal-overlay" @click.self="isRegistering = false">
-      <div class="modal-box">
-        <h2>注册新用户</h2>
-        <form @submit.prevent="handleRegister">
-          <div class="input-group">
-            <label for="reg-username">用户名</label>
-            <input type="text" id="reg-username" v-model="regUsername" required>
-          </div>
-          <div class="input-group">
-            <label for="reg-password">密码</label>
-            <input type="password" id="reg-password" v-model="regPassword" required>
-          </div>
-          <p v-if="regError" class="error-message">{{ regError }}</p>
-          <button type="submit">注册</button>
-        </form>
+      <div class="login-header">
+        <h1>物流配送系统</h1>
+        <p>智能路径规划，高效配送管理</p>
+      </div>
+      
+      <el-form 
+        ref="loginFormRef"
+        :model="loginForm" 
+        :rules="loginRules"
+        @submit.prevent="handleLogin"
+        class="login-form"
+      >
+        <el-form-item prop="username">
+          <el-input 
+            v-model="loginForm.username" 
+            placeholder="请输入用户名"
+            size="large"
+            prefix-icon="User"
+          />
+        </el-form-item>
+        
+        <el-form-item prop="password">
+          <el-input 
+            v-model="loginForm.password" 
+            type="password" 
+            placeholder="请输入密码"
+            size="large"
+            prefix-icon="Lock"
+            show-password
+            @keyup.enter="handleLogin"
+          />
+        </el-form-item>
+        
+        <el-form-item>
+          <el-button 
+            type="primary" 
+            size="large" 
+            @click="handleLogin"
+            :loading="loading"
+            style="width: 100%"
+          >
+            {{ loading ? '登录中...' : '登录' }}
+          </el-button>
+        </el-form-item>
+      </el-form>
+      
+      <div class="login-footer">
+        <el-button type="text" @click="showRegister = true">
+          还没有账户？立即注册
+        </el-button>
       </div>
     </div>
+
+    <!-- 注册对话框 -->
+    <el-dialog
+      v-model="showRegister"
+      title="注册新用户"
+      width="400px"
+      :close-on-click-modal="false"
+    >
+      <el-form 
+        ref="registerFormRef"
+        :model="registerForm" 
+        :rules="registerRules"
+        label-width="80px"
+      >
+        <el-form-item label="用户名" prop="username">
+          <el-input v-model="registerForm.username" placeholder="请输入用户名" />
+        </el-form-item>
+        
+        <el-form-item label="密码" prop="password">
+          <el-input 
+            v-model="registerForm.password" 
+            type="password" 
+            placeholder="请输入密码"
+            show-password
+          />
+        </el-form-item>
+        
+        <el-form-item label="确认密码" prop="confirmPassword">
+          <el-input 
+            v-model="registerForm.confirmPassword" 
+            type="password" 
+            placeholder="请再次输入密码"
+            show-password
+          />
+        </el-form-item>
+      </el-form>
+      
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showRegister = false">取消</el-button>
+          <el-button type="primary" @click="handleRegister" :loading="registerLoading">
+            注册
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { useAuthStore } from '../store';
+import { ref, reactive } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../store'
+import { ElMessage } from 'element-plus'
 
-const router = useRouter();
-const authStore = useAuthStore();
+const router = useRouter()
+const authStore = useAuthStore()
 
-// Login state
-const username = ref('');
-const password = ref('');
-const error = ref('');
+const loginFormRef = ref()
+const registerFormRef = ref()
+const loading = ref(false)
+const registerLoading = ref(false)
+const showRegister = ref(false)
 
-// Registration state
-const isRegistering = ref(false);
-const regUsername = ref('');
-const regPassword = ref('');
-const regError = ref('');
+const loginForm = reactive({
+  username: '',
+  password: ''
+})
+
+const registerForm = reactive({
+  username: '',
+  password: '',
+  confirmPassword: ''
+})
+
+const loginRules = {
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' }
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 4, message: '密码长度不能少于4位', trigger: 'blur' }
+  ]
+}
+
+const validateConfirmPassword = (rule, value, callback) => {
+  if (value !== registerForm.password) {
+    callback(new Error('两次输入密码不一致'))
+  } else {
+    callback()
+  }
+}
+
+const registerRules = {
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' }
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 4, message: '密码长度不能少于4位', trigger: 'blur' }
+  ],
+  confirmPassword: [
+    { required: true, message: '请再次输入密码', trigger: 'blur' },
+    { validator: validateConfirmPassword, trigger: 'blur' }
+  ]
+}
 
 const handleLogin = async () => {
-  error.value = '';
-  try {
-    await authStore.login(username.value, password.value);
-    router.push('/');
-  } catch (err) {
-    error.value = '登录失败，请检查用户名和密码。';
-  }
-};
+  if (!loginFormRef.value) return
+  
+  await loginFormRef.value.validate(async (valid) => {
+    if (valid) {
+      loading.value = true
+      try {
+        await authStore.login(loginForm.username, loginForm.password)
+        ElMessage.success('登录成功')
+        router.push('/')
+      } catch (error) {
+        ElMessage.error('登录失败，请检查用户名和密码')
+      } finally {
+        loading.value = false
+      }
+    }
+  })
+}
 
 const handleRegister = async () => {
-  regError.value = '';
-  if (regPassword.value.length < 4) {
-      regError.value = '密码长度不能少于4位。';
-      return;
-  }
-  try {
-    await authStore.register(regUsername.value, regPassword.value);
-    isRegistering.value = false;
-    // Auto-fill login form after successful registration
-    username.value = regUsername.value;
-    password.value = regPassword.value;
-    alert('注册成功！请使用新账户登录。');
-  } catch (err) {
-    regError.value = '注册失败，用户名可能已被占用。';
-  }
-};
+  if (!registerFormRef.value) return
+  
+  await registerFormRef.value.validate(async (valid) => {
+    if (valid) {
+      registerLoading.value = true
+      try {
+        await authStore.register(registerForm.username, registerForm.password)
+        ElMessage.success('注册成功！请使用新账户登录')
+        showRegister.value = false
+        
+        // 清空表单
+        registerFormRef.value.resetFields()
+        
+        // 自动填充登录表单
+        loginForm.username = registerForm.username
+        loginForm.password = registerForm.password
+      } catch (error) {
+        ElMessage.error('注册失败，用户名可能已被占用')
+      } finally {
+        registerLoading.value = false
+      }
+    }
+  })
+}
 </script>
 
 <style scoped>
@@ -94,68 +214,51 @@ const handleRegister = async () => {
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background-color: #f0f2f5;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
+
 .login-box {
-  padding: 40px;
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  width: 360px;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  padding: 40px;
+  width: 400px;
   text-align: center;
 }
-h2 {
+
+.login-header {
+  margin-bottom: 30px;
+}
+
+.login-header h1 {
+  color: #303133;
+  margin: 0 0 10px 0;
+  font-size: 28px;
+}
+
+.login-header p {
+  color: #909399;
+  margin: 0;
+  font-size: 14px;
+}
+
+.login-form {
   margin-bottom: 20px;
 }
-.input-group {
-  margin-bottom: 15px;
-  text-align: left;
-}
-label {
-  display: block;
-  margin-bottom: 5px;
-}
-input {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  box-sizing: border-box;
-}
-button {
-  width: 100%;
-  padding: 10px;
-  border: none;
-  background-color: #007bff;
-  color: white;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 16px;
-}
-.error-message {
-  color: red;
-  margin-bottom: 15px;
-}
-.register-prompt {
+
+.login-footer {
   margin-top: 20px;
 }
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0,0,0,0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
+
+:deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px #dcdfe6;
 }
-.modal-box {
-  padding: 40px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  width: 360px;
-  text-align: center;
+
+:deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px #409eff;
+}
+
+:deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px #409eff;
 }
 </style>
