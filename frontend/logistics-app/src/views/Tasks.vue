@@ -47,19 +47,36 @@
     <!-- 添加任务对话框 -->
     <el-dialog
       v-model="showAddDialog"
-      title="添加任务"
-      width="500px"
+      title="创建并优化新任务"
+      width="600px"
+      @open="onDialogOpen"
     >
-      <el-form :model="taskForm" label-width="80px">
-        <el-form-item label="任务标题">
-          <el-input v-model="taskForm.title" />
+      <el-form :model="taskForm" label-width="80px" v-loading="dialogLoading">
+        <el-form-item label="选择仓库" prop="depot_id">
+          <el-select v-model="taskForm.depot_id" placeholder="请选择一个仓库" style="width: 100%;">
+            <el-option
+              v-for="depot in depots"
+              :key="depot.id"
+              :label="depot.name"
+              :value="depot.id"
+            />
+          </el-select>
         </el-form-item>
-        <el-form-item label="任务描述">
-          <el-input 
-            v-model="taskForm.description" 
-            type="textarea" 
-            :rows="4"
-          />
+        <el-form-item label="选择客户" prop="customer_ids">
+           <el-select
+            v-model="taskForm.customer_ids"
+            multiple
+            filterable
+            placeholder="请选择客户"
+            style="width: 100%;"
+          >
+            <el-option
+              v-for="customer in customers"
+              :key="customer.id"
+              :label="customer.name"
+              :value="customer.id"
+            />
+          </el-select>
         </el-form-item>
       </el-form>
       
@@ -67,7 +84,7 @@
         <span class="dialog-footer">
           <el-button @click="showAddDialog = false">取消</el-button>
           <el-button type="primary" @click="handleSubmit" :loading="submitLoading">
-            添加
+            创建并优化
           </el-button>
         </span>
       </template>
@@ -127,17 +144,7 @@ const formatDate = (dateString) => {
   return date.toLocaleString('zh-CN')
 }
 
-const toggleStatus = async (task) => {
-  try {
-    const newStatus = task.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED'
-    await axios.put(`/api/tasks/${task.id}`, { ...task, status: newStatus })
-    ElMessage.success('状态更新成功')
-    fetchTasks()
-  } catch (error) {
-    console.error('更新任务状态失败:', error)
-    ElMessage.error('更新任务状态失败')
-  }
-}
+// toggleStatus is no longer needed as the backend handles status automatically.
 
 const handleDelete = async (task) => {
   try {
@@ -162,30 +169,50 @@ const handleDelete = async (task) => {
   }
 }
 
+const onDialogOpen = async () => {
+  dialogLoading.value = true;
+  try {
+    const [depotsRes, customersRes] = await Promise.all([
+      axios.get('/api/depots/'),
+      axios.get('/api/customers/')
+    ]);
+    depots.value = depotsRes.data;
+    customers.value = customersRes.data;
+  } catch (error) {
+    console.error('获取仓库或客户列表失败:', error);
+    ElMessage.error('获取初始化数据失败');
+    showAddDialog.value = false; // 获取失败则关闭对话框
+  } finally {
+    dialogLoading.value = false;
+  }
+};
+
 const handleSubmit = async () => {
-  if (!taskForm.value.title.trim()) {
-    ElMessage.warning('请输入任务标题')
-    return
+  if (!taskForm.value.depot_id) {
+    ElMessage.warning('请选择一个仓库');
+    return;
+  }
+  if (taskForm.value.customer_ids.length === 0) {
+    ElMessage.warning('请至少选择一个客户');
+    return;
   }
 
-  submitLoading.value = true
+  submitLoading.value = true;
   try {
-    await axios.post('/api/tasks/', {
-      title: taskForm.value.title,
-      description: taskForm.value.description
-    })
+    // 注意：后端接口是 /api/tasks/optimize
+    await axios.post('/api/tasks/optimize', taskForm.value);
     
-    ElMessage.success('添加成功')
-    showAddDialog.value = false
-    taskForm.value = { title: '', description: '' }
-    fetchTasks()
+    ElMessage.success('任务创建和优化成功！');
+    showAddDialog.value = false;
+    taskForm.value = { depot_id: null, customer_ids: [] }; // 重置表单
+    fetchTasks(); // 重新获取任务列表
   } catch (error) {
-    console.error('添加任务失败:', error)
-    ElMessage.error('添加任务失败')
+    console.error('创建任务失败:', error);
+    ElMessage.error('创建任务失败，请检查选择的数据。');
   } finally {
-    submitLoading.value = false
+    submitLoading.value = false;
   }
-}
+};
 
 onMounted(() => {
   fetchTasks()

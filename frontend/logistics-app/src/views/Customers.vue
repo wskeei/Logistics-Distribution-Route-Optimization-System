@@ -15,8 +15,8 @@
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="name" label="客户名称" />
         <el-table-column prop="address" label="地址" />
-        <el-table-column prop="latitude" label="纬度" width="100" />
-        <el-table-column prop="longitude" label="经度" width="100" />
+        <el-table-column prop="y" label="纬度" width="100" />
+        <el-table-column prop="x" label="经度" width="100" />
         <el-table-column label="操作" width="180">
           <template #default="scope">
             <el-button size="small" type="primary" @click="handleEdit(scope.row)">
@@ -107,7 +107,13 @@ const handleAdd = () => {
 
 const handleEdit = (customer) => {
   editingCustomer.value = customer
-  customerForm.value = { ...customer }
+  // 将后端的 x, y 映射到前端表单的 longitude, latitude
+  customerForm.value = {
+    name: customer.name,
+    address: customer.address,
+    latitude: customer.y,
+    longitude: customer.x,
+  }
   showAddDialog.value = true
 }
 
@@ -137,11 +143,19 @@ const handleDelete = async (customer) => {
 const handleSubmit = async () => {
   submitLoading.value = true
   try {
+    // 映射前端表单数据到后端需要的格式
+    const payload = {
+      name: customerForm.value.name,
+      address: customerForm.value.address,
+      x: customerForm.value.longitude,
+      y: customerForm.value.latitude,
+    };
+
     if (editingCustomer.value) {
-      await axios.put(`/api/customers/${editingCustomer.value.id}`, customerForm.value)
+      await axios.put(`/api/customers/${editingCustomer.value.id}`, payload)
       ElMessage.success('更新成功')
     } else {
-      await axios.post('/api/customers/', customerForm.value)
+      await axios.post('/api/customers/', payload)
       ElMessage.success('添加成功')
     }
     
@@ -149,7 +163,7 @@ const handleSubmit = async () => {
     fetchCustomers()
   } catch (error) {
     console.error('提交失败:', error)
-    ElMessage.error('提交失败')
+    ElMessage.error('提交失败，请检查输入数据。')
   } finally {
     submitLoading.value = false
   }

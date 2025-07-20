@@ -67,7 +67,7 @@ export const useAuthStore = defineStore('auth', () => {
     setToken(data.access_token);
     
     // 获取用户信息
-    const userResponse = await axios.get('/api/users/me');
+    const userResponse = await axios.get('/api/users/me/');
     setUser(userResponse.data);
   }
 
