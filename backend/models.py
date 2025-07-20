@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Enum
 from sqlalchemy.orm import relationship
-from database import Base
+from .database import Base
 import enum
 from datetime import datetime
 
@@ -71,3 +71,45 @@ class TaskStop(Base):
 
     task = relationship("Task", back_populates="stops")
     customer = relationship("Customer")
+
+
+class Product(Base):
+    __tablename__ = "products"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True, unique=True)
+    weight = Column(Float, default=0.0) # Weight of one unit of the product
+
+
+class OrderStatus(enum.Enum):
+    PENDING = "PENDING"
+    ASSIGNED = "ASSIGNED"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    CANCELED = "CANCELED"
+
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"))
+    status = Column(Enum(OrderStatus), default=OrderStatus.PENDING)
+    demand = Column(Float, default=0.0) # Total demand (e.g., weight) of the order
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    customer = relationship("Customer")
+    # Relationship to the products in the order
+    items = relationship("OrderProduct", back_populates="order", cascade="all, delete-orphan")
+
+
+class OrderProduct(Base):
+    __tablename__ = "order_products"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"))
+    product_id = Column(Integer, ForeignKey("products.id"))
+    quantity = Column(Integer, default=1)
+
+    order = relationship("Order", back_populates="items")
+    product = relationship("Product")

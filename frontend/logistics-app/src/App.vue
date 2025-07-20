@@ -18,17 +18,29 @@
               <el-icon><HomeFilled /></el-icon>
               <span>仪表盘</span>
             </el-menu-item>
-            <el-menu-item index="/planning">
-              <el-icon><Location /></el-icon>
-              <span>路径规划</span>
+            <el-menu-item index="/dispatcher">
+              <el-icon><Cpu /></el-icon>
+              <span>调度中心</span>
+            </el-menu-item>
+            <el-menu-item index="/orders">
+              <el-icon><Tickets /></el-icon>
+              <span>订单管理</span>
+            </el-menu-item>
+            <el-menu-item index="/products">
+              <el-icon><Box /></el-icon>
+              <span>货物管理</span>
             </el-menu-item>
             <el-menu-item index="/customers">
               <el-icon><User /></el-icon>
               <span>客户管理</span>
             </el-menu-item>
             <el-menu-item index="/tasks">
-              <el-icon><Document /></el-icon>
-              <span>任务管理</span>
+              <el-icon><Finished /></el-icon>
+              <span>任务列表</span>
+            </el-menu-item>
+            <el-menu-item index="/planning">
+              <el-icon><Location /></el-icon>
+              <span>路径规划 (旧)</span>
             </el-menu-item>
           </el-menu>
         </el-aside>

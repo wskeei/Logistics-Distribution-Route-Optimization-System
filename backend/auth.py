@@ -7,7 +7,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
-import database, models, schemas
+from . import database, models, schemas
 
 # --- Configuration ---
 SECRET_KEY = "YOUR_VERY_SECRET_KEY_CHANGE_THIS" # In production, use a secure, randomly generated key

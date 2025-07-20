@@ -104,7 +104,8 @@ class TaskBase(BaseModel):
     depot_id: int
 
 class TaskCreate(TaskBase):
-    customer_ids: List[int] # List of customer IDs to include in the task
+    customer_ids: Optional[List[int]] = None # Old field, make it optional
+    order_ids: Optional[List[int]] = None # New field for CVRP
 
 class TaskUpdate(BaseModel):
     status: Optional[str] = None
@@ -119,6 +120,69 @@ class Task(TaskBase):
     vehicle: Optional[Vehicle]
     depot: Depot
     stops: List[TaskStop]
+
+    class Config:
+        from_attributes = True
+
+
+# --- Product Schemas ---
+class ProductBase(BaseModel):
+    name: str
+    weight: float
+
+class ProductCreate(ProductBase):
+    pass
+
+class ProductUpdate(BaseModel):
+    name: Optional[str] = None
+    weight: Optional[float] = None
+
+class Product(ProductBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+
+# --- Dispatch Schemas ---
+class DispatchRequest(BaseModel):
+    vehicle_ids: List[int]
+    order_ids: List[int]
+    depot_id: int
+
+class DispatchResult(BaseModel):
+    total_tasks_created: int
+    tasks: List[Task]
+
+
+# --- Order Schemas ---
+class OrderProductCreate(BaseModel):
+    product_id: int
+    quantity: int
+
+class OrderProduct(OrderProductCreate):
+    id: int
+    product: Product
+
+    class Config:
+        from_attributes = True
+
+class OrderBase(BaseModel):
+    customer_id: int
+
+class OrderCreate(OrderBase):
+    items: List[OrderProductCreate]
+
+class OrderUpdate(BaseModel):
+    status: Optional[str] = None
+
+class Order(OrderBase):
+    id: int
+    status: str
+    demand: float
+    created_at: datetime
+    customer: Customer
+    items: List[OrderProduct]
 
     class Config:
         from_attributes = True

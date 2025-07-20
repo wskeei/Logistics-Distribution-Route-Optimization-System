@@ -1,5 +1,5 @@
 import random
-from typing import List, Annotated
+from typing import List, Annotated, Optional
 import math
 from datetime import timedelta
 
@@ -8,7 +8,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-import auth, database, models, schemas
+from . import auth, database, models, schemas
 
 models.Base.metadata.create_all(bind=database.engine)
 
@@ -19,24 +19,28 @@ models.Base.metadata.create_all(bind=database.engine)
 class Location(BaseModel):
     """
     代表一个地理位置点，可以是仓库或客户。
-    使用Pydantic BaseModel以用于API请求/响应。
+    增加了 demand 字段以支持CVRP。
     """
     id: int
     x: float
     y: float
+    demand: float # 需求量
 
 class Chromosome:
     """
-    代表一个个体（一条配送路径）。
-    基因 (genes) 是一个地点的列表，顺序代表配送顺序。
-    适应度 (fitness) 代表路径的总成本（例如总距离），值越小越好。
+    代表一个个体（一个完整的多车配送方案）。
+    基因 (genes) 是一个地点的列表，其中仓库(id=0)作为分隔符。
+    适应度 (fitness) 代表方案的总成本（例如总距离），值越小越好。
     """
     def __init__(self, genes: List[Location]):
         self.genes = genes
-        self.fitness = float('inf') # 初始适应度设为无穷大
+        self.fitness = float('inf')
+        self.routes: List[List[Location]] = [] # 将解析出的多条路径存储在这里
+        self.total_distance = 0
+        self.capacity_violation = 0 # 容量违规惩罚
 
     def __repr__(self):
-        return f"Chromosome(Path: {' -> '.join(str(g.id) for g in self.genes)}, Fitness: {self.fitness:.2f})"
+        return f"Chromosome(Fitness: {self.fitness:.2f}, Distance: {self.total_distance:.2f}, Capacity Violation: {self.capacity_violation})"
 
 # ==============================================================================
 # 2. 遗传算法核心类 (Genetic Algorithm Core)
@@ -45,11 +49,13 @@ class Chromosome:
 class GeneticAlgorithm:
     """
     封装遗传算法的主要流程。
+    已升级为支持CVRP（带容量约束的车辆路径问题）。
     """
-    def __init__(self, locations: List[Location], population_size: int, mutation_rate: float, crossover_rate: float, generations: int, patience: int = 20):
+    def __init__(self, locations: List[Location], vehicle_capacity: float, population_size: int, mutation_rate: float, crossover_rate: float, generations: int, patience: int = 20):
         """
         初始化遗传算法参数。
-        :param locations: 所有需要访问的地点列表（包括起点）。
+        :param locations: 所有需要访问的地点列表（仓库为第一个）。
+        :param vehicle_capacity: 车辆的运载能力。
         :param population_size: 种群大小。
         :param mutation_rate: 变异率。
         :param crossover_rate: 交叉率。
@@ -57,6 +63,9 @@ class GeneticAlgorithm:
         :param patience: 连续多少代最优解未改善则提前停止。
         """
         self.locations = locations
+        self.vehicle_capacity = vehicle_capacity
+        self.depot = locations[0]
+        self.customers = locations[1:]
         self.population_size = population_size
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
@@ -112,27 +121,62 @@ class GeneticAlgorithm:
     def calculate_fitness(self):
         """
         计算整个种群中每个个体的适应度。
+        这个版本包含了对CVRP的容量约束检查。
         """
+        CAPACITY_PENALTY = 1000  # 超载惩罚系数
+
         for chromosome in self.population:
-            total_distance = 0.0
-            path = chromosome.genes
-            for i in range(len(path) - 1):
-                total_distance += calculate_distance(path[i], path[i+1])
-            total_distance += calculate_distance(path[-1], path[0])
-            chromosome.fitness = total_distance
+            chromosome.routes = []
+            chromosome.total_distance = 0
+            chromosome.capacity_violation = 0
+            
+            # 1. 解析基因序列为多条路径
+            current_route = [self.depot]
+            current_demand = 0
+            
+            for gene in chromosome.genes:
+                gene_demand = gene.demand
+                if current_demand + gene_demand > self.vehicle_capacity:
+                    # 当前车辆装不下，结束当前路径，开启新路径
+                    chromosome.routes.append(current_route)
+                    current_route = [self.depot, gene]
+                    current_demand = gene_demand
+                else:
+                    # 加入当前路径
+                    current_route.append(gene)
+                    current_demand += gene_demand
+            
+            # 添加最后一条路径
+            if len(current_route) > 1:
+                chromosome.routes.append(current_route)
+
+            # 2. 计算总距离和惩罚
+            for route in chromosome.routes:
+                route_distance = 0
+                route_demand = sum(loc.demand for loc in route)
+                
+                # 计算路径距离
+                for i in range(len(route) - 1):
+                    route_distance += calculate_distance(route[i], route[i+1])
+                route_distance += calculate_distance(route[-1], self.depot) # 返回仓库
+                
+                chromosome.total_distance += route_distance
+
+                # 计算容量违规
+                if route_demand > self.vehicle_capacity:
+                    chromosome.capacity_violation += (route_demand - self.vehicle_capacity)
+
+            # 3. 计算最终适应度
+            chromosome.fitness = chromosome.total_distance + (chromosome.capacity_violation * CAPACITY_PENALTY)
 
     def initialize_population(self):
         """
         创建初始种群。
-        对于每个个体，路径的起点固定，其他客户点随机排列。
+        每个个体的基因都是客户点的随机排列。
         """
-        start_node = self.locations[0]
-        other_nodes = self.locations[1:]
-        
         for _ in range(self.population_size):
-            shuffled_nodes = random.sample(other_nodes, len(other_nodes))
-            genes = [start_node] + shuffled_nodes
-            self.population.append(Chromosome(genes))
+            shuffled_customers = random.sample(self.customers, len(self.customers))
+            self.population.append(Chromosome(shuffled_customers))
 
     def selection(self, tournament_size=5) -> List[Chromosome]:
         """
@@ -174,12 +218,12 @@ class GeneticAlgorithm:
         return offspring
 
     def ordered_crossover(self, parent1: List[Location], parent2: List[Location]) -> (List[Location], List[Location]):
-        """有序交叉 (OX1)，适用于旅行商问题。"""
+        """有序交叉 (OX1)，适用于CVRP的染色体结构。"""
         size = len(parent1)
         child1, child2 = [None]*size, [None]*size
         
         # 随机选择交叉点
-        start, end = sorted(random.sample(range(1, size), 2)) # 不交叉起点
+        start, end = sorted(random.sample(range(size), 2))
         
         # 复制交叉片段到子代
         child1[start:end] = parent1[start:end]
@@ -202,10 +246,11 @@ class GeneticAlgorithm:
         return child1, child2
 
     def mutate(self, genes: List[Location]):
-        """交换变异：随机交换路径中的两个城市（不包括起点）。"""
+        """交换变异：随机交换路径中的两个客户点。"""
         if random.random() < self.mutation_rate:
-            idx1, idx2 = random.sample(range(1, len(genes)), 2)
-            genes[idx1], genes[idx2] = genes[idx2], genes[idx1]
+            if len(genes) >= 2:
+                idx1, idx2 = random.sample(range(len(genes)), 2)
+                genes[idx1], genes[idx2] = genes[idx2], genes[idx1]
 
 # ==============================================================================
 # 3. API 定义 (API Definitions)
@@ -561,70 +606,182 @@ def delete_vehicle(
     db.commit()
     return db_vehicle
 
+# --- Product CRUD Endpoints ---
+
+@app.post("/api/products/", response_model=schemas.Product)
+def create_product(
+    product: schemas.ProductCreate,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    db_product = models.Product(**product.model_dump())
+    db.add(db_product)
+    db.commit()
+    db.refresh(db_product)
+    return db_product
+
+@app.get("/api/products/", response_model=List[schemas.Product])
+def read_products(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    products = db.query(models.Product).offset(skip).limit(limit).all()
+    return products
+
+@app.get("/api/products/{product_id}", response_model=schemas.Product)
+def read_product(
+    product_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    db_product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if db_product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return db_product
+
+# --- Order CRUD Endpoints ---
+
+@app.post("/api/orders/", response_model=schemas.Order)
+def create_order(
+    order: schemas.OrderCreate,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    # Validate customer
+    db_customer = db.query(models.Customer).filter(models.Customer.id == order.customer_id).first()
+    if not db_customer:
+        raise HTTPException(status_code=404, detail=f"Customer with id {order.customer_id} not found")
+
+    # Calculate total demand
+    total_demand = 0
+    for item in order.items:
+        db_product = db.query(models.Product).filter(models.Product.id == item.product_id).first()
+        if not db_product:
+            raise HTTPException(status_code=404, detail=f"Product with id {item.product_id} not found")
+        total_demand += db_product.weight * item.quantity
+
+    # Create the order
+    db_order = models.Order(
+        customer_id=order.customer_id,
+        demand=total_demand,
+        status=models.OrderStatus.PENDING
+    )
+    db.add(db_order)
+    db.commit()
+    db.refresh(db_order)
+
+    # Create order items
+    for item in order.items:
+        db_item = models.OrderProduct(
+            order_id=db_order.id,
+            product_id=item.product_id,
+            quantity=item.quantity
+        )
+        db.add(db_item)
+    
+    db.commit()
+    db.refresh(db_order)
+    return db_order
+
+@app.get("/api/orders/", response_model=List[schemas.Order])
+def read_orders(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    orders = db.query(models.Order).offset(skip).limit(limit).all()
+    return orders
+
+@app.get("/api/orders/{order_id}", response_model=schemas.Order)
+def read_order(
+    order_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    db_order = db.query(models.Order).filter(models.Order.id == order_id).first()
+    if db_order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return db_order
+
+
 # --- Task Creation & Optimization Endpoint ---
 
-@app.post("/api/tasks/optimize", response_model=schemas.Task)
-def create_and_optimize_task(
+@app.post("/api/tasks/optimize_cvrp", response_model=schemas.Task)
+def create_and_optimize_cvrp_task(
     task_create: schemas.TaskCreate,
     db: Session = Depends(database.get_db),
     current_user: schemas.User = Depends(auth.get_current_user)
 ):
     """
-    创建一个新任务，从数据库读取仓库和客户信息，执行路径优化，并将结果保存为任务。
+    (CVRP) 创建一个新任务，从数据库读取订单信息，执行带容量约束的路径优化，并将结果保存。
     """
-    # 1. 验证仓库是否存在
+    # 1. 验证并获取车辆信息
+    if not task_create.vehicle_id:
+        raise HTTPException(status_code=400, detail="Vehicle ID is required for CVRP.")
+    vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == task_create.vehicle_id).first()
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+
+    # 2. 验证并获取仓库信息
     depot = db.query(models.Depot).filter(models.Depot.id == task_create.depot_id).first()
     if not depot:
         raise HTTPException(status_code=404, detail="Depot not found")
 
-    # 2. 验证客户是否存在
-    customers = db.query(models.Customer).filter(models.Customer.id.in_(task_create.customer_ids)).all()
-    if len(customers) != len(task_create.customer_ids):
-        raise HTTPException(status_code=404, detail="One or more customers not found")
-    
-    if not customers:
-        raise HTTPException(status_code=400, detail="At least one customer is required for optimization")
-
-    # 3. 创建任务记录
-    db_task = models.Task(
-        depot_id=task_create.depot_id,
-        vehicle_id=task_create.vehicle_id,
-        status=models.TaskStatus.PENDING
-    )
-    db.add(db_task)
-    db.commit()
-    db.refresh(db_task) # Need ID for TaskStop creation
+    # 3. 验证并获取订单信息，并将其转换为Location对象
+    if not task_create.order_ids:
+        raise HTTPException(status_code=400, detail="Order IDs are required for CVRP.")
+    orders = db.query(models.Order).filter(models.Order.id.in_(task_create.order_ids)).all()
+    if len(orders) != len(task_create.order_ids):
+        raise HTTPException(status_code=404, detail="One or more orders not found")
+    if not orders:
+        raise HTTPException(status_code=400, detail="At least one order is required for optimization")
 
     # 4. 准备用于优化的地点列表
-    locations_for_optimization = [
-        Location(id=depot.id, x=depot.x, y=depot.y)
+    depot_location = Location(id=depot.id, x=depot.x, y=depot.y, demand=0)
+    customer_locations = [
+        Location(id=order.customer.id, x=order.customer.x, y=order.customer.y, demand=order.demand)
+        for order in orders
     ]
-    for customer in customers:
-        locations_for_optimization.append(Location(id=customer.id, x=customer.x, y=customer.y))
+    locations_for_optimization = [depot_location] + customer_locations
 
     # 5. 执行遗传算法优化
     ga = GeneticAlgorithm(
         locations=locations_for_optimization,
-        population_size=50, # Default values for now
-        mutation_rate=0.01,
-        crossover_rate=0.85,
-        generations=500,
-        patience=50
+        vehicle_capacity=vehicle.capacity,
+        population_size=100,
+        mutation_rate=0.02,
+        crossover_rate=0.9,
+        generations=1000,
+        patience=100
     )
     best_chromosome = ga.run()
 
-    # 6. 保存优化结果到任务
-    db_task.total_distance = best_chromosome.fitness
-    db_task.status = models.TaskStatus.COMPLETED
+    # 6. 创建主任务记录
+    db_task = models.Task(
+        depot_id=task_create.depot_id,
+        vehicle_id=task_create.vehicle_id, # Main vehicle for the task
+        status=models.TaskStatus.COMPLETED,
+        total_distance=best_chromosome.total_distance
+    )
+    db.add(db_task)
+    db.commit()
+    db.refresh(db_task)
 
-    # 7. 保存路径中的站点顺序
-    for order, loc in enumerate(best_chromosome.genes[1:], start=1): # Skip depot (first element)
-        task_stop = models.TaskStop(
-            task_id=db_task.id,
-            customer_id=loc.id,
-            stop_order=order
-        )
-        db.add(task_stop)
+    # 7. 保存多条路径的站点顺序
+    stop_counter = 1
+    for route in best_chromosome.routes:
+        for customer_loc in route:
+            if customer_loc.id == depot.id: continue # Skip depot
+            task_stop = models.TaskStop(
+                task_id=db_task.id,
+                customer_id=customer_loc.id,
+                stop_order=stop_counter
+            )
+            db.add(task_stop)
+            stop_counter += 1
     
     db.commit()
     db.refresh(db_task)
@@ -661,3 +818,42 @@ def read_task(
 
 # 运行服务器的命令 (在终端中):
 # uvicorn backend.main:app --reload
+
+# --- Dispatcher (Multi-Vehicle, Multi-Order) ---
+from celery.result import AsyncResult
+
+class TaskStatusResponse(BaseModel):
+    task_id: str
+    status: str
+    result: Optional[schemas.DispatchResult] = None
+    error: Optional[str] = None
+
+@app.post("/api/dispatch/run", status_code=202)
+def run_dispatcher_async(
+    dispatch_request: schemas.DispatchRequest,
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    Asynchronously trigger the multi-vehicle dispatching task.
+    """
+    # Move the import inside the function to break the circular import
+    from .celery_worker import run_dispatch_task
+    task = run_dispatch_task.delay(dispatch_request.model_dump())
+    return {"task_id": task.id}
+
+@app.get("/api/dispatch/status/{task_id}", response_model=TaskStatusResponse)
+def get_dispatch_status(task_id: str):
+    """
+    Check the status of a dispatching task.
+    """
+    task_result = AsyncResult(task_id)
+    if task_result.state == 'PENDING':
+        return TaskStatusResponse(task_id=task_id, status='Pending')
+    elif task_result.state == 'PROGRESS':
+        return TaskStatusResponse(task_id=task_id, status='In Progress', result=task_result.info.get('status'))
+    elif task_result.state == 'SUCCESS':
+        response_data = task_result.result['result']
+        return TaskStatusResponse(task_id=task_id, status='Success', result=schemas.DispatchResult.model_validate(response_data))
+    elif task_result.state == 'FAILURE':
+        return TaskStatusResponse(task_id=task_id, status='Failed', error=str(task_result.info))
+    return TaskStatusResponse(task_id=task_id, status=task_result.state)
