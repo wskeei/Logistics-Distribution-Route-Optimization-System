@@ -7,6 +7,7 @@ import { onMounted, ref, watch } from 'vue';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { antPath } from 'leaflet-ant-path';
+import polyline from '@mapbox/polyline';
 
 // FIX: Manually import and set Leaflet icon images to solve Vite path issues
 // This is a common fix for Leaflet in module bundlers.
@@ -27,9 +28,9 @@ const props = defineProps({
     type: Array,
     required: true,
   },
-  path: {
-    type: Array,
-    default: () => [],
+  task: {
+    type: Object,
+    default: () => null,
   },
 });
 
@@ -111,14 +112,16 @@ const updateMarkers = () => {
     return;
   }
   markersLayer.value.clearLayers();
-  if (props.locations.length > 0) {
+  const validLocations = props.locations.filter(loc => loc.x != 0 && loc.y != 0);
+
+  if (validLocations.length > 0) {
     try {
-      props.locations.forEach(loc => {
+      validLocations.forEach(loc => {
         const marker = L.marker([loc.y, loc.x]).addTo(markersLayer.value);
-        marker.bindPopup(`ID: ${loc.id}`);
+        marker.bindPopup(`<b>${loc.name}</b><br>ID: ${loc.id}`);
       });
       // 调整地图视野以包含所有点
-      const bounds = L.latLngBounds(props.locations.map(loc => [loc.y, loc.x]));
+      const bounds = L.latLngBounds(validLocations.map(loc => [loc.y, loc.x]));
       map.value.fitBounds(bounds.pad(0.1));
     } catch(error) {
       console.error("ERROR: Failed to update markers:", error);
@@ -128,52 +131,43 @@ const updateMarkers = () => {
 
 // 绘制路径
 const drawPath = () => {
-  if (!pathLayer.value) {
-    return;
+  if (pathLayer.value) {
+    map.value.removeLayer(pathLayer.value);
   }
-  pathLayer.value.clearLayers();
-  if (props.path.length > 1 && props.locations.length > 0) {
-    try {
-      const locationMap = new Map(props.locations.map(loc => [loc.id, loc]));
-      const latLngs = [];
-      
-      props.path.forEach((id, index) => {
-        const loc = locationMap.get(id);
-        if (loc) {
-          const latLng = [loc.y, loc.x];
-          latLngs.push(latLng);
+  pathLayer.value = L.layerGroup().addTo(map.value);
 
-          // 为路径上的点添加序号标记 (跳过起点)
-          if (index > 0) {
-            const numberIcon = L.divIcon({
-              className: 'path-number-icon',
-              html: `<span>${index}</span>`,
-              iconSize: [24, 24],
-              iconAnchor: [12, 12]
-            });
-            L.marker(latLng, { icon: numberIcon }).addTo(pathLayer.value);
-          }
-        }
+  // 使用新的 task prop 来绘制精确路径
+  if (props.task && props.task.path_geometries && props.task.path_geometries.length > 0) {
+    try {
+      // 为每个几何路径解码并绘制
+      props.task.path_geometries.forEach(encodedPolyline => {
+        // 解码 Polyline。注意：@mapbox/polyline.decode 返回 [lat, lng] 数组，符合 Leaflet 格式
+        const latLngs = polyline.decode(encodedPolyline);
+        
+        // 使用 antPath 绘制解码后的路径
+        antPath(latLngs, {
+          delay: 800,
+          dashArray: [10, 20],
+          weight: 5,
+          color: "#FF0000", // 使用红色以区分
+          pulseColor: "#FFFFFF",
+        }).addTo(pathLayer.value);
       });
 
-      // 闭合路径
-      if (latLngs.length > 0) {
-        latLngs.push(latLngs[0]);
+      // 绘制站点序号标记
+      if (props.task.stops && props.task.stops.length > 0) {
+        props.task.stops.forEach(stop => {
+          const numberIcon = L.divIcon({
+            className: 'path-number-icon',
+            html: `<span>${stop.stop_order}</span>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+          });
+          L.marker([stop.customer.y, stop.customer.x], { icon: numberIcon }).addTo(pathLayer.value);
+        });
       }
-      
-      // 使用 antPath 替换 polyline
-      antPath(latLngs, {
-        "delay": 800,
-        "dashArray": [10, 20],
-        "weight": 5,
-        "color": "#0000FF",
-        "pulseColor": "#FFFFFF",
-        "paused": false,
-        "reverse": false,
-        "hardwareAccelerated": true
-      }).addTo(pathLayer.value);
-    } catch(error) {
-      console.error("ERROR: Failed to draw path:", error);
+    } catch (error) {
+      console.error("ERROR: Failed to decode or draw path:", error);
     }
   }
 };
@@ -181,8 +175,8 @@ const drawPath = () => {
 // 监听locations变化
 watch(() => props.locations, updateMarkers, { deep: true, immediate: true });
 
-// 监听path变化
-watch(() => props.path, drawPath, { deep: true });
+// 监听task变化
+watch(() => props.task, drawPath, { deep: true });
 
 </script>
 

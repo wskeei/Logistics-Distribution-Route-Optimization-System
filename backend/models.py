@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Enum, JSON
 from sqlalchemy.orm import relationship
 from .database import Base
 import enum
@@ -57,6 +57,7 @@ class Task(Base):
     depot = relationship("Depot")
 
     total_distance = Column(Float, nullable=True)
+    path_geometries = Column(JSON, nullable=True) # Store list of ORS path geometries
 
     # Relationship to the sequence of stops
     stops = relationship("TaskStop", back_populates="task", cascade="all, delete-orphan", order_by="TaskStop.stop_order")

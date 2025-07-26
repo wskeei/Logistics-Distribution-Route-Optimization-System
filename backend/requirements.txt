@@ -6,3 +6,6 @@ passlib[bcrypt]
 scikit-learn
 celery
 redis
+python-multipart
+openrouteservice
+python-dotenv

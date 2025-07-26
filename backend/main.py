@@ -8,252 +8,13 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from . import auth, database, models, schemas
+from . import auth, database, models, schemas, ors_client
+from .optimization import GeneticAlgorithm, Location
 
 models.Base.metadata.create_all(bind=database.engine)
 
 # ==============================================================================
-# 1. 数据结构定义 (Data Structures)
-# ==============================================================================
-
-class Location(BaseModel):
-    """
-    代表一个地理位置点，可以是仓库或客户。
-    增加了 demand 字段以支持CVRP。
-    """
-    id: int
-    x: float
-    y: float
-    demand: float # 需求量
-
-class Chromosome:
-    """
-    代表一个个体（一个完整的多车配送方案）。
-    基因 (genes) 是一个地点的列表，其中仓库(id=0)作为分隔符。
-    适应度 (fitness) 代表方案的总成本（例如总距离），值越小越好。
-    """
-    def __init__(self, genes: List[Location]):
-        self.genes = genes
-        self.fitness = float('inf')
-        self.routes: List[List[Location]] = [] # 将解析出的多条路径存储在这里
-        self.total_distance = 0
-        self.capacity_violation = 0 # 容量违规惩罚
-
-    def __repr__(self):
-        return f"Chromosome(Fitness: {self.fitness:.2f}, Distance: {self.total_distance:.2f}, Capacity Violation: {self.capacity_violation})"
-
-# ==============================================================================
-# 2. 遗传算法核心类 (Genetic Algorithm Core)
-# ==============================================================================
-
-class GeneticAlgorithm:
-    """
-    封装遗传算法的主要流程。
-    已升级为支持CVRP（带容量约束的车辆路径问题）。
-    """
-    def __init__(self, locations: List[Location], vehicle_capacity: float, population_size: int, mutation_rate: float, crossover_rate: float, generations: int, patience: int = 20):
-        """
-        初始化遗传算法参数。
-        :param locations: 所有需要访问的地点列表（仓库为第一个）。
-        :param vehicle_capacity: 车辆的运载能力。
-        :param population_size: 种群大小。
-        :param mutation_rate: 变异率。
-        :param crossover_rate: 交叉率。
-        :param generations: 最大迭代代数。
-        :param patience: 连续多少代最优解未改善则提前停止。
-        """
-        self.locations = locations
-        self.vehicle_capacity = vehicle_capacity
-        self.depot = locations[0]
-        self.customers = locations[1:]
-        self.population_size = population_size
-        self.mutation_rate = mutation_rate
-        self.crossover_rate = crossover_rate
-        self.generations = generations
-        self.patience = patience
-        self.population: List[Chromosome] = []
-
-    def run(self):
-        """执行遗传算法的主循环。"""
-        print("遗传算法开始...")
-        # 1. 初始化种群
-        self.initialize_population()
-        print(f"初始种群创建完毕，大小: {len(self.population)}")
-
-        # 首次计算适应度
-        self.calculate_fitness()
-        
-        best_fitness_so_far = float('inf')
-        generations_without_improvement = 0
-
-        for i in range(self.generations):
-            # 1. 选择
-            new_population = self.selection()
-
-            # 2. 交叉与变异
-            offspring_population = self.crossover_and_mutate(new_population)
-
-            # 3. 形成新一代种群 (精英主义：保留上一代最优解)
-            best_of_last_gen = min(self.population, key=lambda c: c.fitness)
-            self.population = [best_of_last_gen] + offspring_population[:self.population_size - 1]
-
-            # 4. 计算新种群的适应度
-            self.calculate_fitness()
-
-            # 打印当前最优解
-            current_best_chromosome = self.population[0]
-            print(f"第 {i+1} 代: 最优解 = {current_best_chromosome}", flush=True)
-
-            # 5. 检查是否满足提前停止条件
-            if current_best_chromosome.fitness < best_fitness_so_far:
-                best_fitness_so_far = current_best_chromosome.fitness
-                generations_without_improvement = 0
-            else:
-                generations_without_improvement += 1
-            
-            if generations_without_improvement >= self.patience:
-                print(f"最优解连续 {self.patience} 代未改善，算法提前结束于第 {i+1} 代。")
-                break
-
-        print("遗传算法结束。")
-        return min(self.population, key=lambda c: c.fitness)
-
-    def calculate_fitness(self):
-        """
-        计算整个种群中每个个体的适应度。
-        这个版本包含了对CVRP的容量约束检查。
-        """
-        CAPACITY_PENALTY = 1000  # 超载惩罚系数
-
-        for chromosome in self.population:
-            chromosome.routes = []
-            chromosome.total_distance = 0
-            chromosome.capacity_violation = 0
-            
-            # 1. 解析基因序列为多条路径
-            current_route = [self.depot]
-            current_demand = 0
-            
-            for gene in chromosome.genes:
-                gene_demand = gene.demand
-                if current_demand + gene_demand > self.vehicle_capacity:
-                    # 当前车辆装不下，结束当前路径，开启新路径
-                    chromosome.routes.append(current_route)
-                    current_route = [self.depot, gene]
-                    current_demand = gene_demand
-                else:
-                    # 加入当前路径
-                    current_route.append(gene)
-                    current_demand += gene_demand
-            
-            # 添加最后一条路径
-            if len(current_route) > 1:
-                chromosome.routes.append(current_route)
-
-            # 2. 计算总距离和惩罚
-            for route in chromosome.routes:
-                route_distance = 0
-                route_demand = sum(loc.demand for loc in route)
-                
-                # 计算路径距离
-                for i in range(len(route) - 1):
-                    route_distance += calculate_distance(route[i], route[i+1])
-                route_distance += calculate_distance(route[-1], self.depot) # 返回仓库
-                
-                chromosome.total_distance += route_distance
-
-                # 计算容量违规
-                if route_demand > self.vehicle_capacity:
-                    chromosome.capacity_violation += (route_demand - self.vehicle_capacity)
-
-            # 3. 计算最终适应度
-            chromosome.fitness = chromosome.total_distance + (chromosome.capacity_violation * CAPACITY_PENALTY)
-
-    def initialize_population(self):
-        """
-        创建初始种群。
-        每个个体的基因都是客户点的随机排列。
-        """
-        for _ in range(self.population_size):
-            shuffled_customers = random.sample(self.customers, len(self.customers))
-            self.population.append(Chromosome(shuffled_customers))
-
-    def selection(self, tournament_size=5) -> List[Chromosome]:
-        """
-        使用锦标赛选择法选择父代。
-        """
-        selected = []
-        for _ in range(self.population_size):
-            # 随机选择k个个体进行锦标赛
-            tournament = random.sample(self.population, tournament_size)
-            # 选择锦标赛中适应度最高的个体
-            winner = min(tournament, key=lambda c: c.fitness)
-            selected.append(winner)
-        return selected
-
-    def crossover_and_mutate(self, parents: List[Chromosome]) -> List[Chromosome]:
-        """对父代进行交叉和变异操作，产生子代。"""
-        offspring = []
-        for i in range(0, self.population_size, 2):
-            p1 = parents[i]
-            # 确保有p2
-            if i + 1 < len(parents):
-                p2 = parents[i+1]
-            else:
-                p2 = p1 # 如果父代数量为奇数，则最后一个与自身配对
-
-            # 交叉
-            if random.random() < self.crossover_rate:
-                c1_genes, c2_genes = self.ordered_crossover(p1.genes, p2.genes)
-            else:
-                c1_genes, c2_genes = p1.genes[:], p2.genes[:]
-            
-            # 变异
-            self.mutate(c1_genes)
-            self.mutate(c2_genes)
-
-            offspring.append(Chromosome(c1_genes))
-            offspring.append(Chromosome(c2_genes))
-        
-        return offspring
-
-    def ordered_crossover(self, parent1: List[Location], parent2: List[Location]) -> (List[Location], List[Location]):
-        """有序交叉 (OX1)，适用于CVRP的染色体结构。"""
-        size = len(parent1)
-        child1, child2 = [None]*size, [None]*size
-        
-        # 随机选择交叉点
-        start, end = sorted(random.sample(range(size), 2))
-        
-        # 复制交叉片段到子代
-        child1[start:end] = parent1[start:end]
-        child2[start:end] = parent2[start:end]
-        
-        # 填充剩余部分
-        p1_genes = [gene for gene in parent2 if gene not in child1]
-        p2_genes = [gene for gene in parent1 if gene not in child2]
-        
-        # 指针
-        p1_idx, p2_idx = 0, 0
-        for i in range(size):
-            if child1[i] is None:
-                child1[i] = p1_genes[p1_idx]
-                p1_idx += 1
-            if child2[i] is None:
-                child2[i] = p2_genes[p2_idx]
-                p2_idx += 1
-        
-        return child1, child2
-
-    def mutate(self, genes: List[Location]):
-        """交换变异：随机交换路径中的两个客户点。"""
-        if random.random() < self.mutation_rate:
-            if len(genes) >= 2:
-                idx1, idx2 = random.sample(range(len(genes)), 2)
-                genes[idx1], genes[idx2] = genes[idx2], genes[idx1]
-
-# ==============================================================================
-# 3. API 定义 (API Definitions)
+# API 定义 (API Definitions)
 # ==============================================================================
 
 app = FastAPI()
@@ -329,33 +90,6 @@ class OptimizationResponse(BaseModel):
     path: List[int]
     distance: float
 
-def calculate_distance(loc1: Location, loc2: Location) -> float:
-    """计算两个地点之间的欧几里得距离。"""
-    return math.sqrt((loc1.x - loc2.x)**2 + (loc1.y - loc2.y)**2)
-
-@app.post("/api/optimize", response_model=OptimizationResponse)
-def optimize_route(
-    request: OptimizationRequest,
-    current_user: Annotated[schemas.User, Depends(auth.get_current_user)]
-):
-    """
-    (Protected) 接收配送点和算法参数，返回优化后的路径。
-    """
-    ga = GeneticAlgorithm(
-        locations=request.locations,
-        population_size=request.population_size,
-        mutation_rate=request.mutation_rate,
-        crossover_rate=request.crossover_rate,
-        generations=request.generations,
-        patience=request.patience
-    )
-    
-    best_chromosome = ga.run()
-    
-    return OptimizationResponse(
-        path=[loc.id for loc in best_chromosome.genes],
-        distance=best_chromosome.fitness
-    )
 
 # --- Customer CRUD Endpoints ---
 
@@ -380,8 +114,23 @@ def create_customer(
 ):
     """
     创建新客户。
+    如果只提供了地址，则自动进行地理编码。
     """
-    db_customer = models.Customer(**customer.model_dump())
+    customer_data = customer.model_dump()
+    
+    # Geocoding logic
+    if customer_data.get('x') is None or customer_data.get('y') is None:
+        if not customer_data.get('address'):
+            raise HTTPException(status_code=400, detail="Either address or coordinates (x, y) must be provided.")
+        
+        coords = ors_client.geocode(customer_data['address'])
+        if not coords:
+            raise HTTPException(status_code=400, detail=f"Could not geocode address: {customer_data['address']}")
+        
+        customer_data['x'] = coords[0] # longitude
+        customer_data['y'] = coords[1] # latitude
+
+    db_customer = models.Customer(**customer_data)
     db.add(db_customer)
     db.commit()
     db.refresh(db_customer)
@@ -463,8 +212,23 @@ def create_depot(
 ):
     """
     创建新仓库。
+    如果只提供了地址，则自动进行地理编码。
     """
-    db_depot = models.Depot(**depot.model_dump())
+    depot_data = depot.model_dump()
+
+    # Geocoding logic
+    if depot_data.get('x') is None or depot_data.get('y') is None:
+        if not depot_data.get('address'):
+            raise HTTPException(status_code=400, detail="Either address or coordinates (x, y) must be provided.")
+        
+        coords = ors_client.geocode(depot_data['address'])
+        if not coords:
+            raise HTTPException(status_code=400, detail=f"Could not geocode address: {depot_data['address']}")
+        
+        depot_data['x'] = coords[0] # longitude
+        depot_data['y'] = coords[1] # latitude
+
+    db_depot = models.Depot(**depot_data)
     db.add(db_depot)
     db.commit()
     db.refresh(db_depot)
@@ -523,6 +287,66 @@ def delete_depot(
     db.commit()
     return db_depot
 
+# --- Geocoding Endpoints ---
+
+class AutocompleteSuggestion(BaseModel):
+    label: str
+    coordinates: List[float]
+
+@app.get("/api/geocode/autocomplete", response_model=List[AutocompleteSuggestion])
+def get_address_suggestions(
+    text: str,
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    (Protected) Get address autocomplete suggestions based on user input.
+    """
+    if not text or not text.strip():
+        return []
+    
+    suggestions = ors_client.autocomplete(text)
+    
+    if suggestions is None:
+        # The client function already prints the specific error, 
+        # so we return a generic 503 Service Unavailable error to the client.
+        raise HTTPException(status_code=503, detail="Address suggestion service is currently unavailable.")
+        
+    return suggestions
+
+
+class AddressQuery(BaseModel):
+    address: str
+    region: Optional[str] = None
+
+class CoordinatesResponse(BaseModel):
+    x: float # longitude
+    y: float # latitude
+
+@app.post("/api/geocode/address", response_model=CoordinatesResponse)
+def get_coordinates_for_address(
+    query: AddressQuery,
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    (Protected) Geocode a full address string to coordinates, with an optional region for focus.
+    """
+    if not query.address or not query.address.strip():
+        raise HTTPException(status_code=400, detail="Address cannot be empty.")
+    
+    focus_point = None
+    if query.region and query.region.strip():
+        # Geocode the region first to get a focus point
+        focus_point = ors_client.geocode(query.region)
+        if not focus_point:
+            print(f"Warning: Could not geocode region '{query.region}' to create a focus point.")
+
+    # Now geocode the main address, using the focus point if available
+    coords = ors_client.geocode(query.address, focus_point=focus_point)
+    
+    if not coords:
+        raise HTTPException(status_code=404, detail=f"Could not geocode address: {query.address}")
+        
+    return CoordinatesResponse(x=coords[0], y=coords[1])
 # --- Vehicle CRUD Endpoints ---
 
 @app.get("/api/vehicles/", response_model=list[schemas.Vehicle])
@@ -581,6 +405,68 @@ def update_vehicle(
     if db_vehicle is None:
         raise HTTPException(status_code=404, detail="Vehicle not found")
     
+# --- Simple Optimization Endpoint (Legacy, but upgraded) ---
+
+@app.post("/api/optimize", response_model=schemas.OptimizationResponse)
+def optimize_simple_route(
+    request: schemas.OptimizationRequest,
+    current_user: Annotated[schemas.User, Depends(auth.get_current_user)]
+):
+    """
+    (Protected) Receives a simple list of locations and returns an optimized route
+    using the new openrouteservice-powered Genetic Algorithm.
+    This endpoint is for simple, stateless optimization tests.
+    """
+    # Process locations: geocode if necessary
+    for loc in request.locations:
+        if loc.x is None or loc.y is None:
+            if not loc.address:
+                raise HTTPException(status_code=400, detail=f"Location with id {loc.id} must have either coordinates or an address.")
+            coords = ors_client.geocode(loc.address)
+            if not coords:
+                raise HTTPException(status_code=400, detail=f"Could not geocode address for location id {loc.id}: {loc.address}")
+            loc.x, loc.y = coords
+
+    # Convert simple locations to the format required by the Genetic Algorithm
+    # We assume a default demand of 0 for this simple endpoint.
+    locations_for_ga = [
+        Location(id=loc.id, x=loc.x, y=loc.y, demand=0)
+        for loc in request.locations
+    ]
+
+    if not locations_for_ga:
+        raise HTTPException(status_code=400, detail="No locations provided for optimization.")
+
+    ga = GeneticAlgorithm(
+        locations=locations_for_ga,
+        vehicle_capacity=request.vehicle_capacity,
+        population_size=request.population_size,
+        mutation_rate=request.mutation_rate,
+        crossover_rate=request.crossover_rate,
+        generations=request.generations,
+        patience=request.patience
+    )
+    
+    best_chromosome = ga.run()
+
+    # Check if a valid route was found
+    if best_chromosome.total_distance == float('inf'):
+        raise HTTPException(
+            status_code=400,
+            detail="Optimization failed: Could not find a valid path connecting all locations. Please check if all points are reachable on the road network."
+        )
+    
+    # Extract routes with location IDs
+    routes_with_ids = []
+    for route in best_chromosome.routes:
+        routes_with_ids.append([loc.id for loc in route])
+
+    return schemas.OptimizationResponse(
+        total_distance=best_chromosome.total_distance,
+        routes=routes_with_ids,
+        path_geometries=best_chromosome.geometries
+    )
+
     update_data = vehicle.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_vehicle, key, value)

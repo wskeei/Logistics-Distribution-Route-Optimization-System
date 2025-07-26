@@ -1,37 +1,27 @@
-from celery import Celery
-
-# Configure Celery
-celery = Celery(
-    'tasks',
-    broker='redis://localhost:6379/0',
-    backend='redis://localhost:6379/0'
-)
-
-celery.conf.update(
-    task_serializer='json',
-    accept_content=['json'],
-    result_serializer='json',
-    timezone='Asia/Shanghai',
-    enable_utc=True,
-)
-
-# Import necessary components
+from .celery_app import celery
 from .database import SessionLocal
 from . import models, schemas
-from .main import GeneticAlgorithm, Location # We can reuse the GA class
-from sklearn.cluster import KMeans
-import numpy as np
+# Heavy imports will be moved inside the task function for lazy loading.
 
 @celery.task(bind=True)
 def run_dispatch_task(self, dispatch_request_data: dict):
     """
     Celery task to run the multi-vehicle dispatching logic.
     """
+    # --- Lazy Loading ---
+    # Import heavy libraries here, inside the task, so the worker starts fast.
+    print("Task received. Importing heavy libraries...")
+    from .optimization import GeneticAlgorithm, Location
+    from sklearn.cluster import KMeans
+    import numpy as np
+    print("Libraries imported.")
+
     db = SessionLocal()
     try:
         dispatch_request = schemas.DispatchRequest.model_validate(dispatch_request_data)
         
         self.update_state(state='PROGRESS', meta={'status': 'Fetching data...'})
+        print("Fetching data from DB...")
         vehicles = db.query(models.Vehicle).filter(models.Vehicle.id.in_(dispatch_request.vehicle_ids)).order_by(models.Vehicle.capacity.desc()).all()
         orders = db.query(models.Order).filter(models.Order.id.in_(dispatch_request.order_ids)).all()
         depot = db.query(models.Depot).filter(models.Depot.id == dispatch_request.depot_id).first()
@@ -40,6 +30,7 @@ def run_dispatch_task(self, dispatch_request_data: dict):
             raise Exception("Invalid data: Vehicles, orders, or depot not found.")
 
         self.update_state(state='PROGRESS', meta={'status': 'Clustering orders...'})
+        print("Clustering orders...")
         customer_coords = np.array([[order.customer.x, order.customer.y] for order in orders])
         num_clusters = min(len(vehicles), len(orders))
         if num_clusters == 0:
@@ -53,6 +44,7 @@ def run_dispatch_task(self, dispatch_request_data: dict):
             order_clusters[clusters[i]].append(order)
 
         self.update_state(state='PROGRESS', meta={'status': 'Assigning clusters and optimizing routes...'})
+        print("Assigning clusters and running optimization...")
         created_tasks_ids = []
         
         for i, vehicle in enumerate(vehicles):
@@ -82,7 +74,9 @@ def run_dispatch_task(self, dispatch_request_data: dict):
 
                 db_task = models.Task(
                     depot_id=depot.id, vehicle_id=vehicle.id,
-                    status=models.TaskStatus.ASSIGNED, total_distance=best_chromosome.total_distance
+                    status=models.TaskStatus.ASSIGNED,
+                    total_distance=best_chromosome.total_distance,
+                    path_geometries=best_chromosome.geometries
                 )
                 db.add(db_task)
                 db.commit()
@@ -108,4 +102,4 @@ def run_dispatch_task(self, dispatch_request_data: dict):
         db.close()
 
 # To run the worker, use the following command in the terminal:
-# celery -A backend.celery_worker worker --loglevel=info
+# celery -A backend.celery_app worker --loglevel=info

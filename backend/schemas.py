@@ -19,14 +19,14 @@ class Token(BaseModel):
     token_type: str
 
 class TokenData(BaseModel):
-    username: str | None = None
+    username: Optional[str] = None
 
 # --- Customer Schemas ---
 class CustomerBase(BaseModel):
     name: str
     address: str
-    x: float
-    y: float
+    x: Optional[float] = None
+    y: Optional[float] = None
 
 class CustomerCreate(CustomerBase):
     pass
@@ -47,8 +47,8 @@ class Customer(CustomerBase):
 class DepotBase(BaseModel):
     name: str
     address: str
-    x: float
-    y: float
+    x: Optional[float] = None
+    y: Optional[float] = None
 
 class DepotCreate(DepotBase):
     pass
@@ -120,6 +120,7 @@ class Task(TaskBase):
     vehicle: Optional[Vehicle]
     depot: Depot
     stops: List[TaskStop]
+    path_geometries: Optional[List[str]] = None
 
     class Config:
         from_attributes = True
@@ -186,3 +187,25 @@ class Order(OrderBase):
 
     class Config:
         from_attributes = True
+
+# --- Schemas for Simple Optimization Endpoint ---
+
+class SimpleLocation(BaseModel):
+    id: int
+    x: Optional[float] = None
+    y: Optional[float] = None
+    address: Optional[str] = None
+
+class OptimizationRequest(BaseModel):
+    locations: List[SimpleLocation]
+    vehicle_capacity: float = 1000.0 # Provide a default capacity
+    population_size: int = 50
+    mutation_rate: float = 0.01
+    crossover_rate: float = 0.9
+    generations: int = 200
+    patience: int = 20
+
+class OptimizationResponse(BaseModel):
+    total_distance: float
+    routes: List[List[int]] # List of routes, each route is a list of location IDs
+    path_geometries: List[str]

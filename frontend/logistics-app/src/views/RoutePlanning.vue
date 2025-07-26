@@ -19,16 +19,37 @@
               <el-input-number v-model="patience" :min="10" :max="200" :step="10" />
             </el-form-item>
             
-            <el-form-item label="地点数据">
-              <el-input
-                v-model="locationsInput"
-                type="textarea"
-                :rows="8"
-                placeholder="格式: id,经度,纬度"
+            <el-form-item label="添加地点">
+              <el-cascader
+                ref="cascaderRef"
+                v-model="cascaderValue"
+                :options="addressOptions"
+                placeholder="请选择省/市/区"
+                style="width: 100%;"
+                filterable
+                clearable
               />
+              <el-input
+                v-model="detailAddress"
+                placeholder="请输入详细街道地址"
+                style="margin-top: 10px;"
+                clearable
+              />
+              <el-button type="success" @click="addLocation" style="width: 100%; margin-top: 10px;" :loading="isGeocoding">
+                {{ isGeocoding ? '解析中...' : '添加地点' }}
+              </el-button>
             </el-form-item>
+
+            <el-table :data="selectedLocations" stripe style="width: 100%; margin-top: 10px;" max-height="250">
+              <el-table-column prop="name" label="地点名称" />
+              <el-table-column label="操作" width="80">
+                <template #default="scope">
+                  <el-button type="danger" size="small" @click="removeLocation(scope.$index)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
             
-            <el-form-item>
+            <el-form-item style="margin-top: 20px;">
               <el-button 
                 type="primary" 
                 @click="startOptimization" 
@@ -42,8 +63,9 @@
 
           <div v-if="result" class="result-section">
             <h4>优化结果</h4>
-            <p>最短距离: {{ result.distance?.toFixed(2) }} km</p>
-            <p>路径顺序: {{ result.path?.join(' -> ') }}</p>
+            <p>最短距离: {{ result.total_distance?.toFixed(2) }} km</p>
+            <!-- Displaying the first route for simplicity -->
+            <p>路径顺序 (第一条): {{ result.routes?.[0]?.join(' -> ') }}</p>
           </div>
         </el-card>
       </el-col>
@@ -51,9 +73,9 @@
       <!-- 右侧地图 -->
       <el-col :span="18" class="map-container">
         <Map
-          :locations="locations"
-          :path="result?.path"
-          @add-location="handleAddNewLocation"
+          :locations="selectedLocations"
+          :task="result"
+          @add-location="handleAddNewLocationByClick"
         />
       </el-col>
     </el-row>
@@ -61,45 +83,115 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import Map from '../components/Map.vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import addressOptionsData from '../assets/pcas-code.json'
 
-const locationsInput = ref(
-`0,121.4737,31.2304
-1,121.45,31.22
-2,121.50,31.24
-3,121.48,31.20
-4,121.52,31.25
-5,121.46,31.19`
-)
+// --- State ---
 const isLoading = ref(false)
+const isGeocoding = ref(false)
 const result = ref(null)
 const generations = ref(500)
 const patience = ref(50)
 
-// 将文本输入解析为地点对象数组
-const locations = computed(() => {
-  return locationsInput.value
-    .trim()
-    .split('\n')
-    .map(line => {
-      const [id, x, y] = line.split(',').map(Number)
-      return { id, x, y }
-    })
-    .filter(loc => !isNaN(loc.id) && !isNaN(loc.x) && !isNaN(loc.y))
+const cascaderRef = ref(null) // Ref for the cascader component
+const addressOptions = ref([])
+const cascaderValue = ref([])
+const detailAddress = ref('')
+
+const selectedLocations = ref([
+  // Add a default depot location for convenience
+  { id: 0, name: '上海市, 人民广场', x: 121.4737, y: 31.2304 },
+])
+
+onMounted(() => {
+  addressOptions.value = addressOptionsData
 })
 
-const handleAddNewLocation = (newLoc) => {
-  const existingIds = locations.value.map(l => l.id)
-  const newId = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 0
-  locationsInput.value += `\n${newId},${newLoc.x.toFixed(4)},${newLoc.y.toFixed(4)}`
+// --- Address Handling ---
+const addLocation = async () => {
+  const checkedNodes = cascaderRef.value?.getCheckedNodes()
+  if (!checkedNodes || checkedNodes.length === 0) {
+    ElMessage.warning('请选择省市区')
+    return
+  }
+  if (!detailAddress.value) {
+    ElMessage.warning('请输入详细街道地址')
+    return
+  }
+
+  const [node] = checkedNodes
+  const region = node.pathLabels.join(','); // e.g., "上海市,黄浦区"
+  const address = detailAddress.value;
+  const fullAddress = node.pathLabels.join('') + detailAddress.value;
+  
+  isGeocoding.value = true;
+  
+  try {
+    const response = await axios.post('/api/geocode/address', {
+      address: address,
+      region: region
+    });
+    
+    const { x, y } = response.data;
+
+    const newId = selectedLocations.value.length > 0
+      ? Math.max(...selectedLocations.value.map(l => l.id)) + 1
+      : 1;
+
+    selectedLocations.value.push({
+      id: newId,
+      name: fullAddress,
+      x: x,
+      y: y
+    });
+
+    ElMessage.success(`地址 "${fullAddress}" 已成功添加并定位！`);
+
+    // Clear inputs
+    cascaderValue.value = [];
+    detailAddress.value = '';
+
+  } catch (error) {
+    console.error('Geocoding failed:', error);
+    if (error.response && error.response.data && error.response.data.detail) {
+      ElMessage.error(`地址解析失败: ${error.response.data.detail}`);
+    } else {
+      ElMessage.error('地址解析失败，请检查地址或网络连接');
+    }
+  } finally {
+    isGeocoding.value = false;
+  }
 }
 
+const removeLocation = (index) => {
+  selectedLocations.value.splice(index, 1)
+}
+
+// --- Map Interaction ---
+const handleAddNewLocationByClick = (newLoc) => {
+  const newId = selectedLocations.value.length > 0 
+    ? Math.max(...selectedLocations.value.map(l => l.id)) + 1 
+    : 1;
+    
+  selectedLocations.value.push({
+    id: newId,
+    name: `地图点 #${newId}`,
+    x: newLoc.x,
+    y: newLoc.y
+  })
+}
+
+// --- Optimization ---
 const startOptimization = async () => {
-  if (locations.value.length < 2) {
+  if (selectedLocations.value.length < 2) {
     ElMessage.warning('请至少添加一个起点和一个客户点')
+    return
+  }
+  if (selectedLocations.value.length > 50) {
+    ElMessage.warning('由于 API 限制，一次最多只能优化 50 个地点')
     return
   }
 
@@ -108,23 +200,51 @@ const startOptimization = async () => {
 
   try {
     const response = await axios.post('/api/optimize', {
-      locations: locations.value,
+      // The backend expects 'locations' with id, x, y
+      locations: selectedLocations.value.map(loc => ({ id: loc.id, x: loc.x, y: loc.y })),
       generations: generations.value,
       patience: patience.value,
+      // Add a default vehicle capacity for this simple page
+      vehicle_capacity: 1000, 
     })
-    result.value = response.data
+    const apiResult = response.data;
+    
+    // Manually construct a 'stops' array for the Map component based on the routes
+    const stops = [];
+    let stopCounter = 1;
+    if (apiResult.routes) {
+      apiResult.routes.forEach(route => {
+        // Skip the depot (usually the first element in the route)
+        const customerStops = route.slice(1);
+        customerStops.forEach(customerId => {
+          const customer = selectedLocations.value.find(loc => loc.id === customerId);
+          if (customer) {
+            stops.push({
+              stop_order: stopCounter++,
+              customer: { x: customer.x, y: customer.y }
+            });
+          }
+        });
+      });
+    }
+    
+    // Combine apiResult with the manually created stops to form the 'task' object for the map
+    result.value = {
+      ...apiResult,
+      stops: stops
+    };
     ElMessage.success('路径优化完成！')
   } catch (error) {
     console.error('优化失败:', error)
-    ElMessage.error('优化失败，请检查输入数据或网络连接')
+    if (error.response && error.response.data && error.response.data.detail) {
+      ElMessage.error(error.response.data.detail)
+    } else {
+      ElMessage.error('优化失败，请检查输入数据或网络连接')
+    }
   } finally {
     isLoading.value = false
   }
 }
-
-onMounted(() => {
-  // 可以在这里添加初始化逻辑
-})
 </script>
 
 <style scoped>
@@ -144,6 +264,12 @@ onMounted(() => {
 
 .control-card {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.el-card__body {
+  flex-grow: 1;
   overflow-y: auto;
 }
 

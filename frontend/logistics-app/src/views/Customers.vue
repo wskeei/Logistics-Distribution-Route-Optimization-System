@@ -44,10 +44,10 @@
           <el-input v-model="customerForm.address" />
         </el-form-item>
         <el-form-item label="纬度">
-          <el-input-number v-model="customerForm.latitude" :precision="6" :step="0.0001" />
+          <el-input-number v-model="customerForm.latitude" :precision="6" :step="0.0001" controls-position="right" />
         </el-form-item>
         <el-form-item label="经度">
-          <el-input-number v-model="customerForm.longitude" :precision="6" :step="0.0001" />
+          <el-input-number v-model="customerForm.longitude" :precision="6" :step="0.0001" controls-position="right" />
         </el-form-item>
       </el-form>
       
@@ -77,8 +77,8 @@ const editingCustomer = ref(null)
 const customerForm = ref({
   name: '',
   address: '',
-  latitude: 31.2304,
-  longitude: 121.4737
+  latitude: null,
+  longitude: null
 })
 
 const fetchCustomers = async () => {
@@ -99,8 +99,8 @@ const handleAdd = () => {
   customerForm.value = {
     name: '',
     address: '',
-    latitude: 31.2304,
-    longitude: 121.4737
+    latitude: null,
+    longitude: null
   }
   showAddDialog.value = true
 }
@@ -147,9 +147,13 @@ const handleSubmit = async () => {
     const payload = {
       name: customerForm.value.name,
       address: customerForm.value.address,
-      x: customerForm.value.longitude,
-      y: customerForm.value.latitude,
     };
+
+    // Only include coordinates if they are provided
+    if (customerForm.value.longitude !== null && customerForm.value.latitude !== null) {
+      payload.x = customerForm.value.longitude;
+      payload.y = customerForm.value.latitude;
+    }
 
     if (editingCustomer.value) {
       await axios.put(`/api/customers/${editingCustomer.value.id}`, payload)
