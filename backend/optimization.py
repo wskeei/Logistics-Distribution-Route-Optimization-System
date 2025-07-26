@@ -1,5 +1,7 @@
 import random
 from typing import List
+import numpy as np
+from sklearn.cluster import KMeans
 from pydantic import BaseModel
 from . import ors_client
 
@@ -33,6 +35,41 @@ class Chromosome:
 
     def __repr__(self):
         return f"Chromosome(Fitness: {self.fitness:.2f}, Distance: {self.total_distance:.2f}, Capacity Violation: {self.capacity_violation})"
+
+# ==============================================================================
+# 2. 聚类算法 (Clustering Algorithm)
+# ==============================================================================
+class KMeansCluster:
+    """
+    使用K-Means算法将客户点进行聚类。
+    """
+    def __init__(self, locations: List[Location], num_clusters: int):
+        """
+        :param locations: 客户点列表 (不包括仓库)。
+        :param num_clusters: 要形成的簇的数量 (通常等于车辆数)。
+        """
+        self.locations = locations
+        self.num_clusters = num_clusters
+        self.coordinates = np.array([[loc.x, loc.y] for loc in self.locations])
+
+    def run(self) -> List[List[Location]]:
+        """
+        执行聚类并返回客户点簇。
+        """
+        if len(self.locations) < self.num_clusters:
+            # 如果客户点数量少于聚类数，则每个客户自成一簇
+            print(f"客户点数量 ({len(self.locations)}) 少于聚类数 ({self.num_clusters})，每个客户将自成一簇。")
+            return [[loc] for loc in self.locations]
+
+        kmeans = KMeans(n_clusters=self.num_clusters, random_state=42, n_init=10)
+        kmeans.fit(self.coordinates)
+        
+        clusters = [[] for _ in range(self.num_clusters)]
+        for i, label in enumerate(kmeans.labels_):
+            clusters[label].append(self.locations[i])
+            
+        # 过滤掉可能出现的空簇
+        return [cluster for cluster in clusters if cluster]
 
 # ==============================================================================
 # 2. 遗传算法核心类 (Genetic Algorithm Core)
@@ -288,3 +325,95 @@ class GeneticAlgorithm:
             if len(genes) >= 2:
                 idx1, idx2 = random.sample(range(len(genes)), 2)
                 genes[idx1], genes[idx2] = genes[idx2], genes[idx1]
+
+# ==============================================================================
+# 4. VRP 求解器主入口 (VRP Solver Main Entrypoint)
+# ==============================================================================
+def solve_vrp(
+    locations: List[Location], 
+    vehicle_capacity: float, 
+    num_vehicles: int,
+    generations: int, 
+    patience: int,
+    population_size: int,
+    mutation_rate: float,
+    crossover_rate: float,
+    algorithm_mode: str = 'ga_only'
+):
+    """
+    VRP求解器的主入口点。
+    根据所选算法模式，调度不同的求解策略。
+
+    :param num_vehicles: 车辆数量, 在聚类模式中用作 K值。
+    """
+    depot = locations[0]
+    customers = locations[1:]
+
+    if algorithm_mode == 'cluster':
+        print("执行聚类 + 遗传算法...")
+        if not customers:
+            print("没有客户点，无需优化。")
+            # 返回一个空的、有效的Chromosome对象
+            empty_chromosome = Chromosome([])
+            empty_chromosome.fitness = 0
+            return empty_chromosome
+
+        # 1. 聚类
+        # 确保聚类数不超过客户数
+        actual_num_clusters = min(num_vehicles, len(customers))
+        if actual_num_clusters < num_vehicles:
+            print(f"警告: 车辆数 ({num_vehicles}) 大于客户数 ({len(customers)})。聚类数将调整为 {actual_num_clusters}。")
+
+        cluster_solver = KMeansCluster(locations=customers, num_clusters=actual_num_clusters)
+        customer_clusters = cluster_solver.run()
+        print(f"客户点被分为 {len(customer_clusters)} 个簇。")
+
+        # 创建一个最终的染色体来聚合所有结果
+        final_chromosome = Chromosome(genes=customers) # Genes are just for record
+        final_chromosome.routes = []
+        final_chromosome.geometries = []
+        final_chromosome.total_distance = 0
+        
+        # 2. 对每个簇独立运行遗传算法
+        for i, cluster in enumerate(customer_clusters):
+            if not cluster:
+                print(f"簇 {i+1} 为空，跳过。")
+                continue
+            
+            print(f"--- 正在优化簇 {i+1}/{len(customer_clusters)}，包含 {len(cluster)} 个客户点 ---")
+            # 每个子问题的地点列表 = 仓库 + 当前簇的客户
+            cluster_locations = [depot] + cluster
+            
+            ga = GeneticAlgorithm(
+                locations=cluster_locations,
+                vehicle_capacity=vehicle_capacity,
+                population_size=population_size,
+                mutation_rate=mutation_rate,
+                crossover_rate=crossover_rate,
+                generations=generations,
+                patience=patience
+            )
+            best_chromosome_for_cluster = ga.run()
+            
+            # 3. 合并结果
+            if best_chromosome_for_cluster:
+                final_chromosome.routes.extend(best_chromosome_for_cluster.routes)
+                final_chromosome.geometries.extend(best_chromosome_for_cluster.geometries)
+                final_chromosome.total_distance += best_chromosome_for_cluster.total_distance
+
+        # 最终适应度就是总距离
+        final_chromosome.fitness = final_chromosome.total_distance
+        return final_chromosome
+
+    else: # 'ga_only' or any other value
+        print("执行纯遗传算法...")
+        ga = GeneticAlgorithm(
+            locations=locations,
+            vehicle_capacity=vehicle_capacity,
+            population_size=population_size,
+            mutation_rate=mutation_rate,
+            crossover_rate=crossover_rate,
+            generations=generations,
+            patience=patience
+        )
+        return ga.run()

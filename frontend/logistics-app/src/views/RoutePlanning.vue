@@ -18,6 +18,17 @@
             <el-form-item label="耐心值">
               <el-input-number v-model="patience" :min="10" :max="200" :step="10" />
             </el-form-item>
+
+           <el-form-item label="算法模式">
+             <el-radio-group v-model="algorithmMode">
+               <el-radio label="ga_only">纯遗传算法</el-radio>
+               <el-radio label="cluster">聚类+遗传算法</el-radio>
+             </el-radio-group>
+           </el-form-item>
+
+           <el-form-item v-if="algorithmMode === 'cluster'" label="车辆数 (K值)">
+             <el-input-number v-model="numVehicles" :min="1" :max="50" />
+           </el-form-item>
             
             <el-form-item label="添加地点">
               <el-cascader
@@ -95,6 +106,8 @@ const isGeocoding = ref(false)
 const result = ref(null)
 const generations = ref(500)
 const patience = ref(50)
+const algorithmMode = ref('ga_only')
+const numVehicles = ref(3)
 
 const cascaderRef = ref(null) // Ref for the cascader component
 const addressOptions = ref([])
@@ -201,11 +214,12 @@ const startOptimization = async () => {
   try {
     const response = await axios.post('/api/optimize', {
       // The backend expects 'locations' with id, x, y
-      locations: selectedLocations.value.map(loc => ({ id: loc.id, x: loc.x, y: loc.y })),
+      locations: selectedLocations.value.map(loc => ({ id: loc.id, x: loc.x, y: loc.y, demand: loc.demand || 0 })),
       generations: generations.value,
       patience: patience.value,
-      // Add a default vehicle capacity for this simple page
-      vehicle_capacity: 1000, 
+      vehicle_capacity: 1000,
+      algorithm_mode: algorithmMode.value,
+      num_vehicles: numVehicles.value,
     })
     const apiResult = response.data;
     

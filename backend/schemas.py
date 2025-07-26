@@ -204,6 +204,8 @@ class OptimizationRequest(BaseModel):
     crossover_rate: float = 0.9
     generations: int = 200
     patience: int = 20
+    num_vehicles: int = 3 # Used as K in clustering
+    algorithm_mode: str = 'ga_only' # 'ga_only' or 'cluster'
 
 class OptimizationResponse(BaseModel):
     total_distance: float

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from . import auth, database, models, schemas, ors_client
-from .optimization import GeneticAlgorithm, Location
+from .optimization import solve_vrp, Location
 
 models.Base.metadata.create_all(bind=database.engine)
 
@@ -437,17 +437,17 @@ def optimize_simple_route(
     if not locations_for_ga:
         raise HTTPException(status_code=400, detail="No locations provided for optimization.")
 
-    ga = GeneticAlgorithm(
+    best_chromosome = solve_vrp(
         locations=locations_for_ga,
         vehicle_capacity=request.vehicle_capacity,
+        num_vehicles=request.num_vehicles,
         population_size=request.population_size,
         mutation_rate=request.mutation_rate,
         crossover_rate=request.crossover_rate,
         generations=request.generations,
-        patience=request.patience
+        patience=request.patience,
+        algorithm_mode=request.algorithm_mode
     )
-    
-    best_chromosome = ga.run()
 
     # Check if a valid route was found
     if best_chromosome.total_distance == float('inf'):
