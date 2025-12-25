@@ -405,6 +405,32 @@ def update_vehicle(
     if db_vehicle is None:
         raise HTTPException(status_code=404, detail="Vehicle not found")
     
+
+    update_data = vehicle.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_vehicle, key, value)
+    
+    db.commit()
+    db.refresh(db_vehicle)
+    return db_vehicle
+
+@app.delete("/api/vehicles/{vehicle_id}", response_model=schemas.Vehicle)
+def delete_vehicle(
+    vehicle_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    删除车辆。
+    """
+    db_vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == vehicle_id).first()
+    if db_vehicle is None:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    
+    db.delete(db_vehicle)
+    db.commit()
+    return db_vehicle
+
 # --- Simple Optimization Endpoint (Legacy, but upgraded) ---
 
 @app.post("/api/optimize", response_model=schemas.OptimizationResponse)
@@ -467,30 +493,6 @@ def optimize_simple_route(
         path_geometries=best_chromosome.geometries
     )
 
-    update_data = vehicle.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(db_vehicle, key, value)
-    
-    db.commit()
-    db.refresh(db_vehicle)
-    return db_vehicle
-
-@app.delete("/api/vehicles/{vehicle_id}", response_model=schemas.Vehicle)
-def delete_vehicle(
-    vehicle_id: int,
-    db: Session = Depends(database.get_db),
-    current_user: schemas.User = Depends(auth.get_current_user)
-):
-    """
-    删除车辆。
-    """
-    db_vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == vehicle_id).first()
-    if db_vehicle is None:
-        raise HTTPException(status_code=404, detail="Vehicle not found")
-    
-    db.delete(db_vehicle)
-    db.commit()
-    return db_vehicle
 
 # --- Product CRUD Endpoints ---
 
