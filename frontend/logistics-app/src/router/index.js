@@ -7,6 +7,8 @@ import Tasks from '../views/Tasks.vue';
 import Products from '../views/Products.vue';
 import Orders from '../views/Orders.vue';
 import Dispatcher from '../views/Dispatcher.vue';
+import Vehicles from '../views/Vehicles.vue';
+import Depots from '../views/Depots.vue';
 import { useAuthStore } from '../store';
 
 const routes = [
@@ -49,6 +51,18 @@ const routes = [
     path: '/orders',
     name: 'Orders',
     component: Orders,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/vehicles',
+    name: 'Vehicles',
+    component: Vehicles,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/depots',
+    name: 'Depots',
+    component: Depots,
     meta: { requiresAuth: true },
   },
   {

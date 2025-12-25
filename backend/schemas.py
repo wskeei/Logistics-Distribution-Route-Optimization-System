@@ -104,16 +104,22 @@ class TaskBase(BaseModel):
     depot_id: int
 
 class TaskCreate(TaskBase):
+    title: Optional[str] = None
+    description: Optional[str] = None
     customer_ids: Optional[List[int]] = None # Old field, make it optional
     order_ids: Optional[List[int]] = None # New field for CVRP
 
 class TaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
     status: Optional[str] = None
     vehicle_id: Optional[int] = None
     total_distance: Optional[float] = None
 
 class Task(TaskBase):
     id: int
+    title: Optional[str] = None
+    description: Optional[str] = None
     created_at: datetime
     status: str
     total_distance: Optional[float]
@@ -150,6 +156,8 @@ class DispatchRequest(BaseModel):
     vehicle_ids: List[int]
     order_ids: List[int]
     depot_id: int
+    title: Optional[str] = "Dispatch Task"
+    description: Optional[str] = ""
 
 class DispatchResult(BaseModel):
     total_tasks_created: int

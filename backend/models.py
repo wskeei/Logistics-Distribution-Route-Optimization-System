@@ -39,6 +39,7 @@ class Vehicle(Base):
 
 class TaskStatus(enum.Enum):
     PENDING = "PENDING"
+    ASSIGNED = "ASSIGNED"
     IN_PROGRESS = "IN_PROGRESS"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
@@ -47,6 +48,8 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=True) # User-defined title
+    description = Column(String, nullable=True) # User-defined description
     created_at = Column(DateTime, default=datetime.utcnow)
     status = Column(Enum(TaskStatus), default=TaskStatus.PENDING)
     

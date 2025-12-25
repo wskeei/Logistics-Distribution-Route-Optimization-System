@@ -704,16 +704,60 @@ def read_task(
         raise HTTPException(status_code=404, detail="Task not found")
     return db_task
 
+@app.delete("/api/tasks/{task_id}", status_code=204)
+def delete_task(
+    task_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    删除任务及其相关站点。
+    """
+    db_task = db.query(models.Task).filter(models.Task.id == task_id).first()
+    if db_task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Cascade delete stops (SQLAlchemy relationship usually handles this, but manual check is good)
+    db.query(models.TaskStop).filter(models.TaskStop.task_id == task_id).delete()
+    
+    db.delete(db_task)
+    db.commit()
+    return None
+
+@app.put("/api/tasks/{task_id}", response_model=schemas.Task)
+def update_task(
+    task_id: int,
+    task_update: schemas.TaskUpdate,
+    db: Session = Depends(database.get_db),
+    current_user: schemas.User = Depends(auth.get_current_user)
+):
+    """
+    更新任务详情 (标题, 描述, 状态等)。
+    """
+    db_task = db.query(models.Task).filter(models.Task.id == task_id).first()
+    if db_task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    update_data = task_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_task, key, value)
+    
+    db.commit()
+    db.refresh(db_task)
+    return db_task
+
 # 运行服务器的命令 (在终端中):
 # uvicorn backend.main:app --reload
 
 # --- Dispatcher (Multi-Vehicle, Multi-Order) ---
 from celery.result import AsyncResult
 
+from typing import Union, Any
+
 class TaskStatusResponse(BaseModel):
     task_id: str
     status: str
-    result: Optional[schemas.DispatchResult] = None
+    result: Optional[Union[schemas.DispatchResult, str, dict, Any]] = None
     error: Optional[str] = None
 
 @app.post("/api/dispatch/run", status_code=202)
@@ -740,8 +784,22 @@ def get_dispatch_status(task_id: str):
     elif task_result.state == 'PROGRESS':
         return TaskStatusResponse(task_id=task_id, status='In Progress', result=task_result.info.get('status'))
     elif task_result.state == 'SUCCESS':
-        response_data = task_result.result['result']
-        return TaskStatusResponse(task_id=task_id, status='Success', result=schemas.DispatchResult.model_validate(response_data))
+        # The return value of the task is in task_result.result
+        # The task returns a dict like: {'status': 'COMPLETE', 'result': ...}
+        task_return_value = task_result.result
+        
+        # Check if the task return value is a dict and has the expected keys
+        if isinstance(task_return_value, dict):
+            if 'error' in task_return_value:
+                 return TaskStatusResponse(task_id=task_id, status='Failed', error=task_return_value['error'])
+            
+            # The 'result' key contains the DispatchResult data
+            if 'result' in task_return_value:
+                 return TaskStatusResponse(task_id=task_id, status='Success', result=schemas.DispatchResult.model_validate(task_return_value['result']))
+        
+        # Fallback if structure is unexpected
+        return TaskStatusResponse(task_id=task_id, status='Success', result=task_return_value)
+
     elif task_result.state == 'FAILURE':
         return TaskStatusResponse(task_id=task_id, status='Failed', error=str(task_result.info))
     return TaskStatusResponse(task_id=task_id, status=task_result.state)

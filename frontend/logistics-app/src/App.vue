@@ -34,6 +34,14 @@
               <el-icon><User /></el-icon>
               <span>客户管理</span>
             </el-menu-item>
+            <el-menu-item index="/vehicles">
+              <el-icon><Van /></el-icon>
+              <span>车辆管理</span>
+            </el-menu-item>
+            <el-menu-item index="/depots">
+              <el-icon><OfficeBuilding /></el-icon>
+              <span>仓库管理</span>
+            </el-menu-item>
             <el-menu-item index="/tasks">
               <el-icon><Finished /></el-icon>
               <span>任务列表</span>

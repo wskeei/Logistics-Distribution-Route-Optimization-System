@@ -297,6 +297,9 @@ class GeneticAlgorithm:
         child1, child2 = [None]*size, [None]*size
         
         # 随机选择交叉点
+        if size < 2:
+            return parent1[:], parent2[:]
+
         start, end = sorted(random.sample(range(size), 2))
         
         # 复制交叉片段到子代

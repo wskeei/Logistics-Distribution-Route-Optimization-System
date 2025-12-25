@@ -29,12 +29,8 @@
         </el-table-column>
         <el-table-column label="操作" width="200">
           <template #default="scope">
-            <el-button 
-              size="small" 
-              :type="scope.row.status === 'COMPLETED' ? 'warning' : 'success'"
-              @click="toggleStatus(scope.row)"
-            >
-              {{ scope.row.status === 'COMPLETED' ? '标记未完成' : '标记完成' }}
+            <el-button size="small" type="primary" @click="handleEdit(scope.row)">
+              编辑
             </el-button>
             <el-button size="small" type="danger" @click="handleDelete(scope.row)">
               删除
@@ -89,6 +85,30 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 编辑任务对话框 -->
+    <el-dialog
+      v-model="showEditDialog"
+      title="编辑任务信息"
+      width="500px"
+    >
+      <el-form :model="editForm" label-width="80px">
+        <el-form-item label="任务标题">
+          <el-input v-model="editForm.title" placeholder="请输入任务标题" />
+        </el-form-item>
+        <el-form-item label="任务描述">
+          <el-input v-model="editForm.description" type="textarea" placeholder="请输入任务描述" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="showEditDialog = false">取消</el-button>
+          <el-button type="primary" @click="submitEdit" :loading="editLoading">
+            保存
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -97,10 +117,18 @@ import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-const tasks = ref([])
 const loading = ref(false)
 const showAddDialog = ref(false)
 const submitLoading = ref(false)
+const showEditDialog = ref(false)
+const editLoading = ref(false)
+const tasks = ref([])
+
+const editForm = ref({
+  id: null,
+  title: '',
+  description: ''
+})
 
 const taskForm = ref({
   title: '',
@@ -146,26 +174,30 @@ const formatDate = (dateString) => {
 
 // toggleStatus is no longer needed as the backend handles status automatically.
 
-const handleDelete = async (task) => {
+const handleEdit = (task) => {
+  editForm.value = {
+    id: task.id,
+    title: task.title || '',
+    description: task.description || ''
+  }
+  showEditDialog.value = true
+}
+
+const submitEdit = async () => {
+  editLoading.value = true
   try {
-    await ElMessageBox.confirm(
-      `确定要删除任务 "${task.title}" 吗？`,
-      '确认删除',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
-    
-    await axios.delete(`/api/tasks/${task.id}`)
-    ElMessage.success('删除成功')
+    await axios.put(`/api/tasks/${editForm.value.id}`, {
+      title: editForm.value.title,
+      description: editForm.value.description
+    })
+    ElMessage.success('更新成功')
+    showEditDialog.value = false
     fetchTasks()
   } catch (error) {
-    if (error !== 'cancel') {
-      console.error('删除任务失败:', error)
-      ElMessage.error('删除任务失败')
-    }
+    console.error('更新任务失败:', error)
+    ElMessage.error('更新任务失败')
+  } finally {
+    editLoading.value = false
   }
 }
 

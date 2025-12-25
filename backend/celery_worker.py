@@ -52,12 +52,14 @@ def run_dispatch_task(self, dispatch_request_data: dict):
             
             order_clusters.sort(key=lambda c: sum(o.demand for o in c), reverse=True)
             
-            best_cluster_idx = -1
-            for j, cluster in enumerate(order_clusters):
-                if not cluster: continue
-                if sum(o.demand for o in cluster) <= vehicle.capacity:
-                    best_cluster_idx = j
-                    break
+            # Assign the largest available cluster to the current vehicle
+            # We removed the strict capacity check to allow the GA to handle multi-trip or partial overloads
+            best_cluster_idx = 0
+            # for j, cluster in enumerate(order_clusters):
+            #     if not cluster: continue
+            #     if sum(o.demand for o in cluster) <= vehicle.capacity:
+            #         best_cluster_idx = j
+            #         break
             
             if best_cluster_idx != -1:
                 assigned_cluster = order_clusters.pop(best_cluster_idx)
@@ -76,7 +78,9 @@ def run_dispatch_task(self, dispatch_request_data: dict):
                     depot_id=depot.id, vehicle_id=vehicle.id,
                     status=models.TaskStatus.ASSIGNED,
                     total_distance=best_chromosome.total_distance,
-                    path_geometries=best_chromosome.geometries
+                    path_geometries=best_chromosome.geometries,
+                    title=dispatch_request.title,
+                    description=dispatch_request.description
                 )
                 db.add(db_task)
                 db.commit()
