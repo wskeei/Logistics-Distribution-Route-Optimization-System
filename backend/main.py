@@ -778,7 +778,8 @@ def get_dispatch_status(task_id: str):
     """
     Check the status of a dispatching task.
     """
-    task_result = AsyncResult(task_id)
+    from .celery_app import celery as celery_app
+    task_result = AsyncResult(task_id, app=celery_app)
     if task_result.state == 'PENDING':
         return TaskStatusResponse(task_id=task_id, status='Pending')
     elif task_result.state == 'PROGRESS':

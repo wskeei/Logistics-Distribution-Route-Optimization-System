@@ -85,9 +85,16 @@ def get_distance_matrix(coordinates: list):
         return matrix
     except openrouteservice.exceptions.ApiError as e:
         print(f"ORS Matrix API Error: {e}")
+        # Print more details if available
+        if hasattr(e, 'message'):
+             print(f"Error Message: {e.message}")
+        if hasattr(e, 'status_code'):
+             print(f"Status Code: {e.status_code}")
         return None
     except Exception as e:
         print(f"An unexpected error occurred during matrix calculation: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 

@@ -263,12 +263,18 @@ const prepareMapData = (result) => {
     
     const routes = [];
     const stops = [];
+    const path_geometries = []; // Add this
     
     result.tasks.forEach(task => {
         // Construct route sequence for this vehicle
         // Typically: Depot -> Stop1 -> Stop2 -> ... -> Depot (implied loop? or just path)
         const taskRoute = [depot.id];
         
+        // Collect path geometries if available
+        if (task.path_geometries) {
+             path_geometries.push(...task.path_geometries);
+        }
+
         // Sort stops by order
         const sortedStops = [...task.stops].sort((a, b) => a.stop_order - b.stop_order);
         
@@ -286,7 +292,8 @@ const prepareMapData = (result) => {
 
     mapTaskData.value = {
         routes: routes,
-        stops: stops
+        stops: stops,
+        path_geometries: path_geometries // Pass to map
     };
 };
 

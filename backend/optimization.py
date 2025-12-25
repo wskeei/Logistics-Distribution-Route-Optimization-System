@@ -116,19 +116,65 @@ class GeneticAlgorithm:
 
         coords = [[loc.x, loc.y] for loc in all_locations]
         
-        matrix_data = ors_client.get_distance_matrix(coords)
-        
-        if not matrix_data or 'distances' not in matrix_data:
-            raise Exception("Failed to retrieve distance matrix from openrouteservice.")
+        try:
+            print(f"Requesting distance matrix for {len(all_locations)} locations...")
+            matrix_data = ors_client.get_distance_matrix(coords)
+            
+            if not matrix_data or 'distances' not in matrix_data:
+                raise Exception("ORS returned invalid data or None.")
 
-        distances = matrix_data['distances']
-        # Create a lookup dictionary for easy access
-        for i, from_loc in enumerate(all_locations):
-            for j, to_loc in enumerate(all_locations):
-                distance = distances[i][j]
-                # If a route is not found, ORS returns None. Treat it as infinite distance.
-                self.distance_matrix[(from_loc.id, to_loc.id)] = float('inf') if distance is None else distance
-        print("Distance matrix successfully computed.")
+            distances = matrix_data['distances']
+            # Create a lookup dictionary for easy access
+            for i, from_loc in enumerate(all_locations):
+                for j, to_loc in enumerate(all_locations):
+                    distance = distances[i][j]
+                    # If a route is not found, ORS returns None. Treat it as infinite distance.
+                    self.distance_matrix[(from_loc.id, to_loc.id)] = float('inf') if distance is None else distance
+            print("Distance matrix successfully computed via ORS.")
+            
+        except Exception as e:
+            print(f"Warning: Failed to retrieve distance matrix from ORS: {e}")
+            print("Falling back to Euclidean distance calculation.")
+            self._compute_euclidean_distance_matrix(all_locations)
+
+    def _compute_euclidean_distance_matrix(self, locations: List[Location]):
+        """
+        Computes the distance matrix using Euclidean distance (approximate straight line).
+        Used as a fallback when ORS API is unavailable.
+        """
+        import math
+        
+        # Earth radius approximation in km, though here we might just use raw coordinate distance 
+        # for simplicity if coordinates are local, but Haversine is better for lat/lon.
+        # For simplicity in this demo, we'll use a simple Euclidean on lat/lon 
+        # and roughly convert to km (1 deg lat ~= 111km). 
+        # BETTER: Haversine formula
+        
+        def haversine(lat1, lon1, lat2, lon2):
+            R = 6371  # Earth radius in kilometers
+            phi1 = math.radians(lat1)
+            phi2 = math.radians(lat2)
+            delta_phi = math.radians(lat2 - lat1)
+            delta_lambda = math.radians(lon2 - lon1)
+            
+            a = math.sin(delta_phi / 2.0) ** 2 + \
+                math.cos(phi1) * math.cos(phi2) * \
+                math.sin(delta_lambda / 2.0) ** 2
+            
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+            
+            return R * c
+
+        for i, from_loc in enumerate(locations):
+            for j, to_loc in enumerate(locations):
+                if i == j:
+                    dist = 0.0
+                else:
+                    dist = haversine(from_loc.y, from_loc.x, to_loc.y, to_loc.x)
+                
+                self.distance_matrix[(from_loc.id, to_loc.id)] = dist
+        
+        print("Distance matrix computed using Euclidean (Haversine) fallback.")
 
     def run(self):
         """执行遗传算法的主循环。"""

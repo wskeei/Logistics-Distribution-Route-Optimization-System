@@ -65,6 +65,10 @@ onMounted(() => {
       }
     });
 
+    // Explicitly call update functions to catch any data passed via props before mount
+    updateMarkers();
+    drawPath();
+
   } catch (error) {
     console.error("FATAL: Failed to initialize map:", error);
   }
@@ -137,22 +141,62 @@ const drawPath = () => {
   pathLayer.value = L.layerGroup().addTo(map.value);
 
   // 使用新的 task prop 来绘制精确路径
-  if (props.task && props.task.path_geometries && props.task.path_geometries.length > 0) {
-    try {
-      // 为每个几何路径解码并绘制
-      props.task.path_geometries.forEach(encodedPolyline => {
-        // 解码 Polyline。注意：@mapbox/polyline.decode 返回 [lat, lng] 数组，符合 Leaflet 格式
-        const latLngs = polyline.decode(encodedPolyline);
-        
-        // 使用 antPath 绘制解码后的路径
-        antPath(latLngs, {
-          delay: 800,
-          dashArray: [10, 20],
-          weight: 5,
-          color: "#FF0000", // 使用红色以区分
-          pulseColor: "#FFFFFF",
-        }).addTo(pathLayer.value);
-      });
+  if (props.task) {
+      let drawn = false;
+
+      // 1. Try to draw precise paths (geometries from ORS)
+      if (props.task.path_geometries && props.task.path_geometries.length > 0) {
+        try {
+          // 为每个几何路径解码并绘制
+          props.task.path_geometries.forEach(encodedPolyline => {
+            // 解码 Polyline。注意：@mapbox/polyline.decode 返回 [lat, lng] 数组，符合 Leaflet 格式
+            const latLngs = polyline.decode(encodedPolyline);
+            
+            // 使用 antPath 绘制解码后的路径
+            antPath(latLngs, {
+              delay: 800,
+              dashArray: [10, 20],
+              weight: 5,
+              color: "#FF0000", // 使用红色以区分
+              pulseColor: "#FFFFFF",
+            }).addTo(pathLayer.value);
+          });
+          drawn = true;
+        } catch (error) {
+          console.error("ERROR: Failed to decode or draw path:", error);
+        }
+      }
+
+      // 2. Fallback: Draw straight lines using routes (Euclidean / Fallback)
+      if (!drawn && props.task.routes && props.task.routes.length > 0 && props.task.stops) {
+          console.log("No detailed geometry found. Drawing straight lines...");
+          // We need to map global customer IDs to their coordinates
+          const locationMap = {};
+          props.locations.forEach(loc => { locationMap[loc.id] = loc; });
+          
+          // Also need to know where the depot is. Usually route starts/ends with depot.
+          // In the props.task.routes (which are just lists of IDs [depot, c1, c2, ...]), we can map them to coords.
+          
+          props.task.routes.forEach(route => {
+              const routeCoords = [];
+              route.forEach(locId => {
+                  const loc = locationMap[locId];
+                  if (loc) {
+                      routeCoords.push([loc.y, loc.x]);
+                  }
+              });
+
+              if (routeCoords.length > 1) {
+                   antPath(routeCoords, {
+                      delay: 800,
+                      dashArray: [10, 20],
+                      weight: 4,
+                      color: "#FF8800", // Use orange for fallback/straight lines
+                      pulseColor: "#FFFFFF",
+                  }).addTo(pathLayer.value);
+              }
+          });
+      }
 
       // 绘制站点序号标记
       if (props.task.stops && props.task.stops.length > 0) {
@@ -166,9 +210,6 @@ const drawPath = () => {
           L.marker([stop.customer.y, stop.customer.x], { icon: numberIcon }).addTo(pathLayer.value);
         });
       }
-    } catch (error) {
-      console.error("ERROR: Failed to decode or draw path:", error);
-    }
   }
 };
 

@@ -174,6 +174,29 @@ const formatDate = (dateString) => {
 
 // toggleStatus is no longer needed as the backend handles status automatically.
 
+const handleDelete = async (task) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除任务 "${task.title}" 吗？`,
+      '确认删除',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    await axios.delete(`/api/tasks/${task.id}`)
+    ElMessage.success('删除成功')
+    fetchTasks()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除任务失败:', error)
+      ElMessage.error('删除任务失败')
+    }
+  }
+}
+
 const handleEdit = (task) => {
   editForm.value = {
     id: task.id,
