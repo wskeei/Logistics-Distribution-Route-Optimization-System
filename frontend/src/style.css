@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", sans-serif;
+
+  --color-primary: #0EA5E9;
+  --color-secondary: #10B981;
+  --color-accent: #8B5CF6;
+  --color-dark: #0F172A;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    @apply text-slate-800 bg-slate-50 antialiased;
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    min-height: 100vh;
+  }
+}
+
+.glass-card {
+  @apply bg-white/70 backdrop-blur-md border border-white/40 shadow-xl rounded-2xl;
+}
+
+.glass-panel {
+  @apply bg-white/40 backdrop-blur-lg border-r border-white/30;
+}

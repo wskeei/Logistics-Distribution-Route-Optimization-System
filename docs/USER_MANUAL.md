@@ -1,68 +1,95 @@
-# User Manual (Standard Operating Procedure)
+# 📙 用户手册 (User Manual)
 
-This guide walks you through the standard workflow of using the Logistics Distribution Route Optimization System.
+本手册将引导您完成系统的标准操作流程，从基础数据录入到执行智能调度。
 
-## 1. Access & Login
-1.  Open your browser and navigate to the frontend URL (default: `http://localhost:5173`).
-2.  **First Time**: Click "Register" to create a new account.
-3.  **Login**: Enter your credentials to access the dashboard.
-
-## 2. Master Data Management
-Before planning routes, you must populate the system with basic data.
-
-### 2.1 Vehicle Management
-**Navigation**: Sidebar -> Vehicle Management (车辆管理)
-1.  Click **"Add Vehicle"**.
-2.  Enter the vehicle details:
-    -   **Name**: E.g., "Truck A", "Van 101".
-    -   **Capacity**: The maximum load (e.g., 1000 kg).
-3.  Click **"Add"**. Repeat for your entire fleet.
-
-### 2.2 Customer Management
-**Navigation**: Sidebar -> Customer Management (客户管理)
-1.  Click **"Add Customer"**.
-2.  Enter:
-    -   **Name**: E.g., "Supermarket A".
-    -   **Address**: Full address string. The system will auto-calculate coordinates.
-    -   *(Optional)* Manually adjust Latitude/Longitude if needed.
-3.  Click **"Add"**.
-
-### 2.3 Product (Goods) Management
-**Navigation**: Sidebar -> Goods Management (货物管理)
-1.  Click **"Add Product"**.
-2.  Enter:
-    -   **Name**: E.g., "Rice 10kg".
-    -   **Weight**: Weight per unit (e.g., 10.0).
-3.  Click **"Add"**.
-
-## 3. Order Creation
-**Navigation**: Sidebar -> Order Management (订单管理)
-1.  Click **"Add Order"**.
-2.  Select a **Customer** from the dropdown.
-3.  Add **Items**:
-    -   Select a Product.
-    -   Enter Quantity.
-    -   *(Optional)* Add more items to the same order.
-4.  Click **"Create Order"**. The system automatically calculates total weight/demand.
-
-## 4. Intelligent Dispatch (Route Planning)
-**Navigation**: Sidebar -> Dispatch Center (调度中心)
-1.  **Select Orders**: Check the boxes for all pending orders you want to deliver.
-2.  **Select Vehicles**: Check the boxes for available vehicles.
-3.  **Depot**: Ensure the correct starting depot is selected/configured.
-4.  Click **"Start Dispatch"**.
-5.  The system will process the calculation in the background. Wait for the status to change to **Success**.
-
-## 5. Viewing Results
-**Navigation**: Sidebar -> Task List (任务列表)
-1.  Find your latest task (Task ID).
-2.  Click **"View Details"**.
-3.  You will see:
-    -   **Route Map**: Visual path on the map.
-    -   **Stop Sequence**: Ordered list of customers to visit.
-    -   **Total Distance**: Estimated travel distance.
+> **提示**: 建议在使用系统前准备好客户地址清单和车辆信息。
 
 ---
-**Tips**:
--   Ensure customer addresses are accurate for the map to work correctly.
--   If "Dispatch" fails, check if your vehicles have enough capacity for the selected orders.
+
+## 1. 登录与注册
+
+1.  打开浏览器访问前端地址 (默认: `http://localhost:5173`)。
+2.  **首次使用**: 点击登录页面的 "Register" 链接，输入用户名和密码注册管理员账户。
+3.  **登录**: 输入凭据访问系统仪表盘 (Dashboard)。
+
+---
+
+## 2. 基础数据准备 (Master Data)
+
+在进行路径规划前，必须先建立基础档案。请按顺序操作左侧导航栏：
+
+### 2.1 货物管理 (Goods)
+录入通过物流网络运输的基础商品信息。
+*   进入 **"货物管理"** 页面。
+*   点击 **"添加货物"**。
+*   输入名称（如 "A4纸"）和 **单件重量**（如 2.5 kg）。系统将依据重量计算车辆载重。
+
+### 2.2 车辆管理 (Vehicles)
+建立车队档案。
+*   进入 **"车辆管理"** 页面。
+*   点击 **"添加车辆"**。
+*   **名称**: 用于区分不同车辆（如 "沪A-88888 厢式货车"）。
+*   **载重 (Capacity)**: 核心约束参数（如 2000 kg），调度时算法会确保装载量不超过此数值。
+
+### 2.3 客户管理 (Customers)
+录入收货人地址信息。
+*   进入 **"客户管理"** 页面。
+*   点击 **"添加客户"**。
+*   **地址录入**:
+    *   推荐输入规范的地址字符串（如 "上海市浦东新区陆家嘴环路1000号"）。
+    *   系统会自动调用地图服务将地址转换为经纬度坐标。
+    *   如果地址无法识别，您可以手动输入经纬度 (Lat/Lng)。
+
+---
+
+## 3. 面单与订单 (Order Processing)
+
+当客户产生运输需求时，创建配送订单。
+
+*   进入 **"订单管理"** 页面。
+*   点击 **"新建订单"**。
+*   **选择客户**: 从下拉列表中选择收货客户。
+*   **添加明细**: 选择货物并输入数量。系统会自动汇总订单的 **总需求重量 (Total Demand)**。
+*   点击 **"提交"** 生成待调度订单。
+
+---
+
+## 4. 智能调度中心 (Dispatch Center)
+
+这是系统的核心功能区域，用于自动规划路线。
+
+1.  进入 **"调度中心"** 页面。
+2.  **勾选待排订单**: 列表显示所有状态为 "PENDING" 的订单，勾选您希望在本次作业中完成的订单。
+3.  **勾选可用车辆**: 选择当前空闲且可用的车辆。
+4.  **开始计算**: 点击页面底部的 **"智能调度 (Start Dispatch)"** 按钮。
+    *   此时任务提交到后台计算集群。
+    *   页面会显示进度条或状态提示 (Pending -> Processing -> Success)。
+
+> **注意**: 如果订单总量远超选定车辆的总载重，算法可能会警告或无法完全分配所有订单。建议合理匹配运力。
+
+---
+
+## 5. 任务与路径查看 (Tasks & Routes)
+
+调度完成后，结果会生成为 "运输任务 (Task)"。
+
+1.  进入 **"任务列表"** 页面。
+2.  找到最新生成的任务 (按时间排序)。
+3.  点击 **"查看详情"** 或 **"地图模式"**。
+4.  **核心信息**:
+    *   **地图轨迹**: 在地图上直观展示行驶路线。
+    *   **站点顺序**: 司机应依次访问的客户列表 (譬如: 仓库 -> 客户A -> 客户B -> 仓库)。
+    *   **预计里程**: 任务的总行驶距离参考。
+
+---
+
+## 💡 常见问题 (FAQ)
+
+**Q: 输入地址后地图上显示的位置不对？**
+A: 请尝试输入更详细的行政区划信息（如包含省/市/区）。如果依然偏差较大，请手动核对并修改经纬度坐标。
+
+**Q: 调度一直显示 "Processing"？**
+A: 请联系管理员检查后台的 "Celery Worker" 服务是否正常运行。大规模订单计算（>100单）可能需要数十秒至几分钟。
+
+**Q: 为什么有的订单没有被分配？**
+A: 如果车辆均已满载（触发容量约束），剩余订单将保留在 "PENDING" 状态，等待下一波次调度或补充车辆。

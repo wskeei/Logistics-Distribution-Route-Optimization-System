@@ -1,7 +1,8 @@
 import random
 from sqlalchemy.orm import Session
-from .database import SessionLocal, engine
-from . import models, auth
+from .app.db.session import SessionLocal, engine
+from .app.models import sql_models as models
+from .app.core import security as auth
 
 # Create tables if they don't exist
 models.Base.metadata.create_all(bind=engine)
