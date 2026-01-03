@@ -1,5 +1,5 @@
 <template>
-  <div class="depots-container">
+  <div class="depots-container p-6 md:p-8">
     <el-card>
       <template #header>
         <div class="card-header">
@@ -184,9 +184,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.depots-container {
-  padding: 20px;
-}
+/* .depots-container padding handled by Tailwind */
 
 .card-header {
   display: flex;

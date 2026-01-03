@@ -1,84 +1,86 @@
 <template>
-  <el-row :gutter="20">
-    <el-col :span="24">
-      <el-card>
-        <template #header>调度中心</template>
-        <el-steps :active="activeStep" finish-status="success" simple style="margin-bottom: 20px">
-          <el-step title="配置" />
-          <el-step title="信息" />
-          <el-step title="执行" />
-        </el-steps>
+  <div class="p-6 md:p-8">
+    <el-row :gutter="20">
+      <el-col :span="24">
+        <el-card>
+          <template #header>调度中心</template>
+          <el-steps :active="activeStep" finish-status="success" simple style="margin-bottom: 20px">
+            <el-step title="配置" />
+            <el-step title="信息" />
+            <el-step title="执行" />
+          </el-steps>
 
-        <!-- Step 0: 选择资源 -->
-        <div v-if="activeStep === 0">
-          <el-form label-position="top">
-            <el-form-item label="选择出发仓库">
-              <el-select v-model="selectedDepot" placeholder="请选择仓库" filterable style="width: 100%">
-                <el-option v-for="depot in depots" :key="depot.id" :label="depot.name" :value="depot.id" />
-              </el-select>
-            </el-form-item>
-          </el-form>
-          <el-divider />
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <h3>选择待调度订单 (状态为 PENDING)</h3>
-              <el-table :data="pendingOrders" @selection-change="handleOrderSelection" height="400">
-                <el-table-column type="selection" width="55" />
-                <el-table-column prop="customer.name" label="客户" />
-                <el-table-column prop="demand" label="需求量" />
-                <el-table-column prop="created_at" label="创建时间">
-                    <template #default="scope">
-                        {{ new Date(scope.row.created_at).toLocaleDateString() }}
-                    </template>
-                </el-table-column>
-              </el-table>
-            </el-col>
-            <el-col :span="12">
-              <h3>选择可用车辆</h3>
-              <el-table :data="vehicles" @selection-change="handleVehicleSelection" height="400">
-                <el-table-column type="selection" width="55" />
-                <el-table-column prop="name" label="车辆名称" />
-                <el-table-column prop="capacity" label="容量" />
-              </el-table>
-            </el-col>
-          </el-row>
-          <div style="text-align: center; margin-top: 20px;">
-            <el-button type="primary" @click="nextStep" :disabled="!selectedDepot || selectedOrders.length === 0 || selectedVehicles.length === 0">
-              下一步: 填写信息
-            </el-button>
-          </div>
-        </div>
-
-        <!-- Step 1: 填写信息 -->
-        <div v-if="activeStep === 1">
-            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h3>任务信息</h3>
-                <el-form label-position="top" :model="taskInfo">
-                    <el-form-item label="任务标题" required>
-                        <el-input v-model="taskInfo.title" placeholder="例如：2024-05-20 上午配送任务" />
-                    </el-form-item>
-                    <el-form-item label="任务描述">
-                        <el-input v-model="taskInfo.description" type="textarea" :rows="4" placeholder="备注信息..." />
-                    </el-form-item>
-                </el-form>
-                <div style="text-align: center; margin-top: 20px;">
-                    <el-button @click="activeStep = 0">上一步</el-button>
-                    <el-button type="primary" @click="startDispatch" :disabled="!taskInfo.title">
-                        开始调度
-                    </el-button>
-                </div>
+          <!-- Step 0: 选择资源 -->
+          <div v-if="activeStep === 0">
+            <el-form label-position="top">
+              <el-form-item label="选择出发仓库">
+                <el-select v-model="selectedDepot" placeholder="请选择仓库" filterable style="width: 100%">
+                  <el-option v-for="depot in depots" :key="depot.id" :label="depot.name" :value="depot.id" />
+                </el-select>
+              </el-form-item>
+            </el-form>
+            <el-divider />
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <h3>选择待调度订单 (状态为 PENDING)</h3>
+                <el-table :data="pendingOrders" @selection-change="handleOrderSelection" height="400">
+                  <el-table-column type="selection" width="55" />
+                  <el-table-column prop="customer.name" label="客户" />
+                  <el-table-column prop="demand" label="需求量" />
+                  <el-table-column prop="created_at" label="创建时间">
+                      <template #default="scope">
+                          {{ new Date(scope.row.created_at).toLocaleDateString() }}
+                      </template>
+                  </el-table-column>
+                </el-table>
+              </el-col>
+              <el-col :span="12">
+                <h3>选择可用车辆</h3>
+                <el-table :data="vehicles" @selection-change="handleVehicleSelection" height="400">
+                  <el-table-column type="selection" width="55" />
+                  <el-table-column prop="name" label="车辆名称" />
+                  <el-table-column prop="capacity" label="容量" />
+                </el-table>
+              </el-col>
+            </el-row>
+            <div style="text-align: center; margin-top: 20px;">
+              <el-button type="primary" @click="nextStep" :disabled="!selectedDepot || selectedOrders.length === 0 || selectedVehicles.length === 0">
+                下一步: 填写信息
+              </el-button>
             </div>
-        </div>
+          </div>
 
-        <!-- Step 2: 执行中 -->
-        <div v-if="activeStep === 2" v-loading="isDispatching" :element-loading-text="dispatchStatus" style="padding: 50px;">
-          <el-result icon="info" title="智能调度计算中" :sub-title="dispatchStatus">
-          </el-result>
-        </div>
+          <!-- Step 1: 填写信息 -->
+          <div v-if="activeStep === 1">
+              <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                  <h3>任务信息</h3>
+                  <el-form label-position="top" :model="taskInfo">
+                      <el-form-item label="任务标题" required>
+                          <el-input v-model="taskInfo.title" placeholder="例如：2024-05-20 上午配送任务" />
+                      </el-form-item>
+                      <el-form-item label="任务描述">
+                          <el-input v-model="taskInfo.description" type="textarea" :rows="4" placeholder="备注信息..." />
+                      </el-form-item>
+                  </el-form>
+                  <div style="text-align: center; margin-top: 20px;">
+                      <el-button @click="activeStep = 0">上一步</el-button>
+                      <el-button type="primary" @click="startDispatch" :disabled="!taskInfo.title">
+                          开始调度
+                      </el-button>
+                  </div>
+              </div>
+          </div>
 
-      </el-card>
-    </el-col>
-  </el-row>
+          <!-- Step 2: 执行中 -->
+          <div v-if="activeStep === 2" v-loading="isDispatching" :element-loading-text="dispatchStatus" style="padding: 50px;">
+            <el-result icon="info" title="智能调度计算中" :sub-title="dispatchStatus">
+            </el-result>
+          </div>
+
+        </el-card>
+      </el-col>
+    </el-row>
+  </div>
 </template>
 
 <script setup>

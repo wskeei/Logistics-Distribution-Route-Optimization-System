@@ -1,5 +1,5 @@
 <template>
-  <div class="p-6 min-h-full">
+  <div class="min-h-full p-6 md:p-8">
     <div class="mb-8" v-motion-slide-visible-once-top>
       <h1 class="text-3xl font-bold text-slate-800 mb-2">物流配送路径规划系统</h1>
       <p class="text-slate-500">欢迎回来，<span class="font-semibold text-primary">{{ username }}</span>！</p>

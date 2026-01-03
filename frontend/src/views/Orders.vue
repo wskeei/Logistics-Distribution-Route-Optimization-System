@@ -1,96 +1,98 @@
 <template>
-  <el-card class="box-card">
-    <template #header>
-      <div class="card-header">
-        <span>订单管理</span>
-        <el-button class="button" type="primary" @click="handleCreate">新建订单</el-button>
-      </div>
-    </template>
-    <el-table :data="orders" style="width: 100%" v-loading="loading" @row-click="handleRowClick" row-class-name="cursor-pointer">
-      <el-table-column prop="id" label="订单ID" width="100" />
-      <el-table-column prop="customer.name" label="客户名称" />
-      <el-table-column prop="status" label="状态" width="120">
-        <template #default="scope">
-          <el-tag :type="getStatusTag(scope.row.status)">{{ scope.row.status }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="demand" label="总需求 (重量)" width="150" />
-      <el-table-column prop="created_at" label="创建时间">
-        <template #default="scope">
-          {{ new Date(scope.row.created_at).toLocaleString() }}
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="150">
-        <template #default="scope">
-          <el-button size="small" type="danger" @click.stop="handleDelete(scope.row.id)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-  </el-card>
+  <div class="p-6 md:p-8">
+    <el-card class="box-card">
+      <template #header>
+        <div class="card-header">
+          <span>订单管理</span>
+          <el-button class="button" type="primary" @click="handleCreate">新建订单</el-button>
+        </div>
+      </template>
+      <el-table :data="orders" style="width: 100%" v-loading="loading" @row-click="handleRowClick" row-class-name="cursor-pointer">
+        <el-table-column prop="id" label="订单ID" width="100" />
+        <el-table-column prop="customer.name" label="客户名称" />
+        <el-table-column prop="status" label="状态" width="120">
+          <template #default="scope">
+            <el-tag :type="getStatusTag(scope.row.status)">{{ scope.row.status }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="demand" label="总需求 (重量)" width="150" />
+        <el-table-column prop="created_at" label="创建时间">
+          <template #default="scope">
+            {{ new Date(scope.row.created_at).toLocaleString() }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="150">
+          <template #default="scope">
+            <el-button size="small" type="danger" @click.stop="handleDelete(scope.row.id)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
 
-  <!-- 新建订单对话框 -->
-  <el-dialog v-model="dialogVisible" title="新建订单" width="600px" @close="resetForm">
-    <el-form :model="form" :rules="rules" ref="formRef" label-width="80px">
-      <el-form-item label="选择客户" prop="customer_id">
-        <el-select v-model="form.customer_id" placeholder="请选择客户" filterable style="width: 100%">
-          <el-option v-for="customer in customers" :key="customer.id" :label="customer.name" :value="customer.id" />
-        </el-select>
-      </el-form-item>
-      <el-divider />
-      <h4>订单商品</h4>
-      <div v-for="(item, index) in form.items" :key="index" class="item-row">
-        <el-form-item :prop="'items.' + index + '.product_id'" :rules="rules.product_id" label-width="0">
-          <el-select v-model="item.product_id" placeholder="选择商品" filterable style="width: 200px; margin-right: 10px;">
-            <el-option v-for="product in products" :key="product.id" :label="`${product.name} (${product.weight}kg)`" :value="product.id" />
+    <!-- 新建订单对话框 -->
+    <el-dialog v-model="dialogVisible" title="新建订单" width="600px" @close="resetForm">
+      <el-form :model="form" :rules="rules" ref="formRef" label-width="80px">
+        <el-form-item label="选择客户" prop="customer_id">
+          <el-select v-model="form.customer_id" placeholder="请选择客户" filterable style="width: 100%">
+            <el-option v-for="customer in customers" :key="customer.id" :label="customer.name" :value="customer.id" />
           </el-select>
         </el-form-item>
-        <el-form-item :prop="'items.' + index + '.quantity'" :rules="rules.quantity" label-width="0">
-          <el-input-number v-model="item.quantity" :min="1" placeholder="数量" style="margin-right: 10px;" />
-        </el-form-item>
-        <el-button type="danger" :icon="Delete" circle @click="removeItem(index)" />
+        <el-divider />
+        <h4>订单商品</h4>
+        <div v-for="(item, index) in form.items" :key="index" class="item-row">
+          <el-form-item :prop="'items.' + index + '.product_id'" :rules="rules.product_id" label-width="0">
+            <el-select v-model="item.product_id" placeholder="选择商品" filterable style="width: 200px; margin-right: 10px;">
+              <el-option v-for="product in products" :key="product.id" :label="`${product.name} (${product.weight}kg)`" :value="product.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :prop="'items.' + index + '.quantity'" :rules="rules.quantity" label-width="0">
+            <el-input-number v-model="item.quantity" :min="1" placeholder="数量" style="margin-right: 10px;" />
+          </el-form-item>
+          <el-button type="danger" :icon="Delete" circle @click="removeItem(index)" />
+        </div>
+        <el-button @click="addItem" style="margin-top: 10px;">添加商品</el-button>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="dialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitForm">创建</el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <!-- 详情对话框 -->
+    <el-dialog v-model="detailVisible" title="订单详情" width="600px">
+      <div v-if="currentOrder">
+          <el-descriptions :column="2" border>
+              <el-descriptions-item label="订单ID">{{ currentOrder.id }}</el-descriptions-item>
+              <el-descriptions-item label="状态">
+                  <el-tag :type="getStatusTag(currentOrder.status)">{{ currentOrder.status }}</el-tag>
+              </el-descriptions-item>
+              <el-descriptions-item label="客户名称">{{ currentOrder.customer.name }}</el-descriptions-item>
+              <el-descriptions-item label="客户地址">{{ currentOrder.customer.address }}</el-descriptions-item>
+              <el-descriptions-item label="创建时间">{{ new Date(currentOrder.created_at).toLocaleString() }}</el-descriptions-item>
+              <el-descriptions-item label="总需求">{{ currentOrder.demand }} kg</el-descriptions-item>
+          </el-descriptions>
+
+          <el-divider content-position="left">包含商品</el-divider>
+
+          <el-table :data="currentOrder.items" style="width: 100%" max-height="300">
+              <el-table-column prop="product.name" label="商品名称" />
+              <el-table-column prop="quantity" label="数量" width="100" />
+              <el-table-column label="单重" width="100">
+                  <template #default="scope">
+                      {{ scope.row.product.weight }} kg
+                  </template>
+              </el-table-column>
+              <el-table-column label="小计重量">
+                  <template #default="scope">
+                      {{ (scope.row.product.weight * scope.row.quantity).toFixed(2) }} kg
+                  </template>
+              </el-table-column>
+          </el-table>
       </div>
-      <el-button @click="addItem" style="margin-top: 10px;">添加商品</el-button>
-    </el-form>
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitForm">创建</el-button>
-      </span>
-    </template>
-  </el-dialog>
-
-  <!-- 详情对话框 -->
-  <el-dialog v-model="detailVisible" title="订单详情" width="600px">
-    <div v-if="currentOrder">
-        <el-descriptions :column="2" border>
-            <el-descriptions-item label="订单ID">{{ currentOrder.id }}</el-descriptions-item>
-            <el-descriptions-item label="状态">
-                <el-tag :type="getStatusTag(currentOrder.status)">{{ currentOrder.status }}</el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="客户名称">{{ currentOrder.customer.name }}</el-descriptions-item>
-            <el-descriptions-item label="客户地址">{{ currentOrder.customer.address }}</el-descriptions-item>
-            <el-descriptions-item label="创建时间">{{ new Date(currentOrder.created_at).toLocaleString() }}</el-descriptions-item>
-            <el-descriptions-item label="总需求">{{ currentOrder.demand }} kg</el-descriptions-item>
-        </el-descriptions>
-
-        <el-divider content-position="left">包含商品</el-divider>
-
-        <el-table :data="currentOrder.items" style="width: 100%" max-height="300">
-            <el-table-column prop="product.name" label="商品名称" />
-            <el-table-column prop="quantity" label="数量" width="100" />
-            <el-table-column label="单重" width="100">
-                <template #default="scope">
-                    {{ scope.row.product.weight }} kg
-                </template>
-            </el-table-column>
-            <el-table-column label="小计重量">
-                <template #default="scope">
-                    {{ (scope.row.product.weight * scope.row.quantity).toFixed(2) }} kg
-                </template>
-            </el-table-column>
-        </el-table>
-    </div>
-  </el-dialog>
+    </el-dialog>
+  </div>
 </template>
 
 <script setup>

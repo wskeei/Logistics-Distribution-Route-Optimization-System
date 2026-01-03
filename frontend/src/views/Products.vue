@@ -1,5 +1,6 @@
 <template>
-  <el-card class="box-card">
+  <div class="p-6 md:p-8">
+    <el-card class="box-card">
     <template #header>
       <div class="card-header">
         <span>货物管理</span>
@@ -60,6 +61,7 @@
       </el-table>
     </div>
   </el-dialog>
+  </div>
 </template>
 
 <script setup>

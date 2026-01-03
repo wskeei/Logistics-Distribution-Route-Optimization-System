@@ -1,5 +1,5 @@
 <template>
-  <div class="tasks-container">
+  <div class="p-6 md:p-8">
     <el-card>
       <template #header>
         <div class="card-header">
@@ -420,10 +420,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.tasks-container {
-  padding: 20px;
-}
-
+/* .tasks-container removed padding */
 .card-header {
   display: flex;
   justify-content: space-between;
