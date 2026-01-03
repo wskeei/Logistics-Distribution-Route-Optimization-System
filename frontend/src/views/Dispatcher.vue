@@ -7,7 +7,6 @@
           <el-step title="配置" />
           <el-step title="信息" />
           <el-step title="执行" />
-          <el-step title="结果" />
         </el-steps>
 
         <!-- Step 0: 选择资源 -->
@@ -77,22 +76,6 @@
           </el-result>
         </div>
 
-        <!-- Step 3: 结果展示 -->
-        <div v-if="activeStep === 3">
-          <el-result v-if="dispatchResult && !dispatchResult.error" icon="success" title="调度成功" :sub-title="`成功规划 ${dispatchResult.tasks.length} 条路线`">
-             <template #extra>
-               <el-button type="primary" @click="reset">发起新调度</el-button>
-             </template> 
-          </el-result>
-
-          <el-alert v-else-if="dispatchResult && dispatchResult.error" title="调度失败" type="error" :description="dispatchResult.error" show-icon />
-
-          <!-- Map Visualization -->
-          <div v-if="dispatchResult && !dispatchResult.error" style="height: 600px; margin-top: 20px;">
-             <Map :locations="mapLocations" :task="mapTaskData"  />
-          </div>
-        </div>
-
       </el-card>
     </el-col>
   </el-row>
@@ -101,10 +84,12 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { ElMessage } from 'element-plus';
+import { useRouter } from 'vue-router'; // Added router
 import { useAuthStore } from '../store';
-import Map from '../components/Map.vue'; // Reuse Map component
+// Removed Map import
 
 const authStore = useAuthStore();
+const router = useRouter(); // Init router
 
 const activeStep = ref(0);
 const depots = ref([]);
@@ -124,10 +109,7 @@ const dispatchStatus = ref('正在初始化...');
 const dispatchResult = ref(null);
 let pollInterval = null;
 
-// Map Data
-const mapLocations = ref([]);
-const mapTaskData = ref(null);
-
+// Removed Map Data refs
 
 const fetchData = async (url) => {
   const response = await fetch(url, {
@@ -226,13 +208,13 @@ const pollTaskStatus = async (taskId) => {
     if (response.status === 'Success' || response.status === 'Failed') {
       clearInterval(pollInterval);
       isDispatching.value = false;
-      activeStep.value = 3; // Show result
       
       if (response.status === 'Success') {
-          dispatchResult.value = response.result;
-          prepareMapData(response.result); // Prepare data for map
+          ElMessage.success('调度任务完成！');
+          router.push('/tasks'); // Redirect to Tasks list
       } else {
-          dispatchResult.value = { error: response.error || 'Unknown error' };
+          ElMessage.error(response.error || '调度失败');
+          activeStep.value = 0; // Reset on failure
       }
     }
   } catch (error) {
@@ -241,92 +223,6 @@ const pollTaskStatus = async (taskId) => {
     activeStep.value = 0;
   }
 };
-
-const prepareMapData = (result) => {
-    // 1. Prepare Locations (Depot + Customers) for the Map component
-    const depot = depots.value.find(d => d.id === selectedDepot.value);
-    
-    const locs = [];
-    // Add Depot
-    if (depot) {
-        locs.push({ id: depot.id, name: `[仓库] ${depot.name}`, x: depot.x, y: depot.y, type: 'depot' });
-    }
-    
-    // Add Customers from the dispatched orders
-    // result.tasks contains the created tasks. Each task has stops.
-    // We can extract all unique customers from all tasks.
-    
-    // However, selectedOrders already contains customer info.
-    selectedOrders.value.forEach(order => {
-        locs.push({
-            id: order.customer.id,
-            name: order.customer.name,
-            x: order.customer.x,
-            y: order.customer.y,
-            type: 'customer'
-        });
-    });
-    
-    mapLocations.value = locs;
-
-    // 2. Prepare Task Data (Routes) for Map component
-    // Map component expects { routes: [[id1, id2...], ...], stops: [...] }
-    // The result.tasks contains full Task objects with path_geometries (if integrated) or we need to reconstruct from stops.
-    
-    // Since backend might not return 'routes' array directly in DispatchResult (it returns list of Tasks),
-    // we need to adapt it. 
-    // IF the Map component logic relies on `routes` being list of IDs:
-    
-    const routes = [];
-    const stops = [];
-    const path_geometries = []; // Add this
-    
-    result.tasks.forEach(task => {
-        // Construct route sequence for this vehicle
-        // Typically: Depot -> Stop1 -> Stop2 -> ... -> Depot (implied loop? or just path)
-        const taskRoute = [depot.id];
-        
-        // Collect path geometries if available
-        if (task.path_geometries) {
-             path_geometries.push(...task.path_geometries);
-        }
-
-        // Sort stops by order
-        const sortedStops = [...task.stops].sort((a, b) => a.stop_order - b.stop_order);
-        
-        sortedStops.forEach(stop => {
-            taskRoute.push(stop.customer.id);
-            // Also collect stops info for markers
-             stops.push({
-                 stop_order: stop.stop_order, // Global order might be confusing if multiple vehicles, but Map handles it per route if capable
-                 customer: { x: stop.customer.x, y: stop.customer.y }
-             });
-        });
-        
-        routes.push(taskRoute);
-    });
-
-    mapTaskData.value = {
-        routes: routes,
-        stops: stops,
-        path_geometries: path_geometries // Pass to map
-    };
-};
-
-const reset = () => {
-  activeStep.value = 0;
-  isDispatching.value = false;
-  dispatchResult.value = null;
-  selectedDepot.value = null;
-  selectedOrders.value = [];
-  selectedVehicles.value = [];
-  taskInfo.value = { title: '', description: '' };
-};
 </script>
-
-<style scoped>
-/* Steps customization */
-:deep(.el-step__title) {
-    font-size: 14px;
-}
+<style>
 </style>

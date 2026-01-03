@@ -6,7 +6,7 @@
         <el-button class="button" type="primary" @click="handleCreate">新建订单</el-button>
       </div>
     </template>
-    <el-table :data="orders" style="width: 100%" v-loading="loading">
+    <el-table :data="orders" style="width: 100%" v-loading="loading" @row-click="handleRowClick" row-class-name="cursor-pointer">
       <el-table-column prop="id" label="订单ID" width="100" />
       <el-table-column prop="customer.name" label="客户名称" />
       <el-table-column prop="status" label="状态" width="120">
@@ -22,7 +22,7 @@
       </el-table-column>
       <el-table-column label="操作" width="150">
         <template #default="scope">
-          <el-button size="small" type="danger" @click="handleDelete(scope.row.id)">删除</el-button>
+          <el-button size="small" type="danger" @click.stop="handleDelete(scope.row.id)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -58,6 +58,39 @@
       </span>
     </template>
   </el-dialog>
+
+  <!-- 详情对话框 -->
+  <el-dialog v-model="detailVisible" title="订单详情" width="600px">
+    <div v-if="currentOrder">
+        <el-descriptions :column="2" border>
+            <el-descriptions-item label="订单ID">{{ currentOrder.id }}</el-descriptions-item>
+            <el-descriptions-item label="状态">
+                <el-tag :type="getStatusTag(currentOrder.status)">{{ currentOrder.status }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="客户名称">{{ currentOrder.customer.name }}</el-descriptions-item>
+            <el-descriptions-item label="客户地址">{{ currentOrder.customer.address }}</el-descriptions-item>
+            <el-descriptions-item label="创建时间">{{ new Date(currentOrder.created_at).toLocaleString() }}</el-descriptions-item>
+            <el-descriptions-item label="总需求">{{ currentOrder.demand }} kg</el-descriptions-item>
+        </el-descriptions>
+
+        <el-divider content-position="left">包含商品</el-divider>
+
+        <el-table :data="currentOrder.items" style="width: 100%" max-height="300">
+            <el-table-column prop="product.name" label="商品名称" />
+            <el-table-column prop="quantity" label="数量" width="100" />
+            <el-table-column label="单重" width="100">
+                <template #default="scope">
+                    {{ scope.row.product.weight }} kg
+                </template>
+            </el-table-column>
+            <el-table-column label="小计重量">
+                <template #default="scope">
+                    {{ (scope.row.product.weight * scope.row.quantity).toFixed(2) }} kg
+                </template>
+            </el-table-column>
+        </el-table>
+    </div>
+  </el-dialog>
 </template>
 
 <script setup>
@@ -72,6 +105,10 @@ const products = ref([]);
 const loading = ref(true);
 const dialogVisible = ref(false);
 const formRef = ref(null);
+
+// Detail State
+const detailVisible = ref(false);
+const currentOrder = ref(null);
 
 const authStore = useAuthStore();
 
@@ -132,6 +169,11 @@ onMounted(() => {
   fetchOrders();
   fetchInitialData();
 });
+
+const handleRowClick = (row) => {
+    currentOrder.value = row;
+    detailVisible.value = true;
+}
 
 const resetForm = () => {
   form.customer_id = null;

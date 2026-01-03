@@ -6,14 +6,14 @@
         <el-button class="button" type="primary" @click="handleCreate">新建货物</el-button>
       </div>
     </template>
-    <el-table :data="products" style="width: 100%" v-loading="loading">
+    <el-table :data="products" style="width: 100%" v-loading="loading" @row-click="handleRowClick" row-class-name="cursor-pointer">
       <el-table-column prop="id" label="货物ID" width="100" />
       <el-table-column prop="name" label="货物名称" />
       <el-table-column prop="weight" label="重量 (kg)" />
       <el-table-column label="操作" width="150">
         <template #default="scope">
-          <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
-          <el-button size="small" type="danger" @click="handleDelete(scope.row.id)">删除</el-button>
+          <el-button size="small" @click.stop="handleEdit(scope.row)">编辑</el-button>
+          <el-button size="small" type="danger" @click.stop="handleDelete(scope.row.id)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -36,10 +36,34 @@
       </span>
     </template>
   </el-dialog>
+
+  <!-- 详情对话框 -->
+  <el-dialog v-model="detailVisible" title="货物详情" width="600px">
+    <div v-if="currentProduct">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="ID">{{ currentProduct.id }}</el-descriptions-item>
+        <el-descriptions-item label="名称">{{ currentProduct.name }}</el-descriptions-item>
+        <el-descriptions-item label="单件重量">{{ currentProduct.weight }} kg</el-descriptions-item>
+      </el-descriptions>
+      
+      <el-divider content-position="left">关联订单记录</el-divider>
+      
+      <el-table :data="relatedOrders" style="width: 100%" height="300" empty-text="暂无关联订单">
+         <el-table-column prop="id" label="订单ID" width="80" />
+         <el-table-column prop="customer.name" label="客户" />
+         <el-table-column prop="status" label="状态" width="100" />
+         <el-table-column label="本商品数量" width="120">
+            <template #default="scope">
+                {{ getProductQuantity(scope.row, currentProduct.id) }}
+            </template>
+         </el-table-column>
+      </el-table>
+    </div>
+  </el-dialog>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, computed } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useAuthStore } from '../store';
 
@@ -49,6 +73,11 @@ const dialogVisible = ref(false);
 const isEdit = ref(false);
 const formRef = ref(null);
 const currentProductId = ref(null);
+
+// Detail View Refs
+const detailVisible = ref(false);
+const currentProduct = ref(null);
+const allOrders = ref([]);
 
 const authStore = useAuthStore();
 
@@ -89,7 +118,37 @@ const fetchProducts = async () => {
   }
 };
 
-onMounted(fetchProducts);
+const fetchOrders = async () => {
+    try {
+        allOrders.value = await apiRequest('/api/orders/', { method: 'GET' });
+    } catch (e) {
+        console.error("Failed to fetch orders", e);
+    }
+}
+
+onMounted(() => {
+    fetchProducts();
+    fetchOrders(); 
+});
+
+const handleRowClick = (row) => {
+    currentProduct.value = row;
+    detailVisible.value = true;
+    if (allOrders.value.length === 0) fetchOrders();
+}
+
+const relatedOrders = computed(() => {
+    if (!currentProduct.value || !allOrders.value) return [];
+    // Filter orders that contain this product
+    return allOrders.value.filter(order => 
+        order.items && order.items.some(item => item.product.id === currentProduct.value.id)
+    );
+});
+
+const getProductQuantity = (order, productId) => {
+    const item = order.items.find(i => i.product.id === productId);
+    return item ? item.quantity : 0;
+}
 
 const resetForm = () => {
   form.name = '';
