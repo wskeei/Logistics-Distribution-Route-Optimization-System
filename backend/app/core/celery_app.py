@@ -5,7 +5,7 @@ celery = Celery(
     'tasks',
     broker='redis://localhost:6379/0',
     backend='redis://localhost:6379/0',
-    include=['backend.celery_worker'] # Add worker module to include list
+    include=['backend.app.worker'] # Add worker module to include list
 )
 
 # Optional configuration

@@ -71,12 +71,8 @@
           
           <el-main class="p-6 overflow-y-auto scroll-smooth">
             <router-view v-slot="{ Component }">
-              <transition
-                enter-active-class="animate__animated animate__fadeIn"
-                leave-active-class="animate__animated animate__fadeOut"
-                mode="out-in"
-              >
-                <component :is="Component" />
+              <transition name="fade">
+                <component :is="Component" :key="$route.path" />
               </transition>
             </router-view>
           </el-main>
@@ -117,5 +113,16 @@ const handleLogout = () => {
 .el-menu-item.is-active {
   background-color: rgba(14, 165, 233, 0.1) !important;
   font-weight: 600;
+}
+
+/* Fade Transition */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

@@ -1,9 +1,9 @@
 <template>
-  <div class="login-container">
-    <div class="login-box">
-      <div class="login-header">
-        <h1>物流配送系统</h1>
-        <p>智能路径规划，高效配送管理</p>
+  <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f0f9ff] to-[#e0f2fe]">
+    <div class="glass-card w-[400px] p-10 text-center">
+      <div class="mb-8">
+        <h1 class="text-3xl font-bold text-slate-800 mb-2">物流配送系统</h1>
+        <p class="text-slate-500 text-sm">智能路径规划，高效配送管理</p>
       </div>
       
       <el-form 
@@ -11,7 +11,7 @@
         :model="loginForm" 
         :rules="loginRules"
         @submit.prevent="handleLogin"
-        class="login-form"
+        class="mb-6"
       >
         <el-form-item prop="username">
           <el-input 
@@ -19,6 +19,7 @@
             placeholder="请输入用户名"
             size="large"
             prefix-icon="User"
+            class="!h-12"
           />
         </el-form-item>
         
@@ -31,6 +32,7 @@
             prefix-icon="Lock"
             show-password
             @keyup.enter="handleLogin"
+            class="!h-12"
           />
         </el-form-item>
         
@@ -40,15 +42,16 @@
             size="large" 
             @click="handleLogin"
             :loading="loading"
-            style="width: 100%"
+            class="w-full !h-12 !text-lg !rounded-lg shadow-lg hover:shadow-xl transition-all duration-300"
+            color="#0EA5E9"
           >
             {{ loading ? '登录中...' : '登录' }}
           </el-button>
         </el-form-item>
       </el-form>
       
-      <div class="login-footer">
-        <el-button type="text" @click="showRegister = true">
+      <div class="mt-6">
+        <el-button link type="primary" @click="showRegister = true">
           还没有账户？立即注册
         </el-button>
       </div>
@@ -60,12 +63,14 @@
       title="注册新用户"
       width="400px"
       :close-on-click-modal="false"
+      class="!rounded-2xl"
     >
       <el-form 
         ref="registerFormRef"
         :model="registerForm" 
         :rules="registerRules"
         label-width="80px"
+        class="mt-4"
       >
         <el-form-item label="用户名" prop="username">
           <el-input v-model="registerForm.username" placeholder="请输入用户名" />
@@ -93,7 +98,7 @@
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="showRegister = false">取消</el-button>
-          <el-button type="primary" @click="handleRegister" :loading="registerLoading">
+          <el-button type="primary" @click="handleRegister" :loading="registerLoading" color="#0EA5E9">
             注册
           </el-button>
         </span>
@@ -209,56 +214,5 @@ const handleRegister = async () => {
 </script>
 
 <style scoped>
-.login-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.login-box {
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  padding: 40px;
-  width: 400px;
-  text-align: center;
-}
-
-.login-header {
-  margin-bottom: 30px;
-}
-
-.login-header h1 {
-  color: #303133;
-  margin: 0 0 10px 0;
-  font-size: 28px;
-}
-
-.login-header p {
-  color: #909399;
-  margin: 0;
-  font-size: 14px;
-}
-
-.login-form {
-  margin-bottom: 20px;
-}
-
-.login-footer {
-  margin-top: 20px;
-}
-
-:deep(.el-input__wrapper) {
-  box-shadow: 0 0 0 1px #dcdfe6;
-}
-
-:deep(.el-input__wrapper:hover) {
-  box-shadow: 0 0 0 1px #409eff;
-}
-
-:deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px #409eff;
-}
+/* Scoped styles are largely replaced by Tailwind classes */
 </style>

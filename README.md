@@ -50,52 +50,47 @@
 *   **Node.js**: 18+
 *   **Redis**: 服务需在本地启动或通过 Docker 运行
 
-### 2. 启动服务
-
-本项目提供了一键启动脚本，可同时运行前后端服务。
+### 2. 初始化数据 (推荐)
+如果您是初次运行，建议先生成全国演示数据：
 
 ```bash
-# 1. 安装后端依赖 (如果尚未安装)
 cd backend
+# 使用 seed_data.py 生成测试数据 (包含全国主要城市的车辆、订单等)
+uv run python seed_data.py
+```
+
+### 3.后端服务启动
+我们提供了一个增强版启动脚本 `run_dev.py`，它会自动释放 8000 端口并同时管理 Celery Worker：
+
+```bash
+cd backend
+
+# 1. 安装项目依赖
 uv sync
 
-# 2. 启动开发模式 (同时启动 API, Worker 和 Frontend)
-# 必须先进入 backend 目录，以便 uv 自动识别环境
-cd backend
+# 2. 启动服务 (同时启动 API 和 Worker)
 uv run python run_dev.py
 ```
+> **提示**: 脚本启动时会自动检查并清理占用 8000 端口的进程，无需手动 Kill。
 
-终端将显示服务启动日志。此时，您可以访问：
-*   **前端应用**: [http://localhost:5173](http://localhost:5173)
-*   **后端 API 文档**: [http://localhost:8000/docs](http://localhost:8000/docs)
-
-### 3. (可选) 分步启动
-
-如果您希望分别调试，可以手动启动各部分：
-
-**后端 API**
-```bash
-# 建议使用 run_dev.py，因为它会自动处理环境变量
-cd backend
-uv run python run_dev.py
-
-# 如果必须手动启动 (需要设置 PYTHONPATH):
-# Windows (PowerShell):
-# $env:PYTHONPATH=".."; uv run uvicorn app.main:app --reload
-```
-
-**Celery Worker**
-```bash
-# Windows (PowerShell):
-# $env:PYTHONPATH=".."; uv run celery -A app.worker worker --loglevel=info
-```
-
-**前端**
+### 4. 前端应用启动
 ```bash
 cd frontend
+
+# 1. 安装依赖
 npm install
+
+# 2. 启动开发服务器
 npm run dev
 ```
+
+### 5. 访问系统
+服务启动后，您可以通过以下地址访问：
+- **Web 可视化大屏**: [http://localhost:5173](http://localhost:5173)
+- **后端 API 文档**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Celery 任务监控**: (如已配置 Flower) [http://localhost:5555](http://localhost:5555)
+
+
 
 ## 📂 目录结构
 

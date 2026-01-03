@@ -3,7 +3,44 @@ import sys
 import os
 import signal
 
+import time
+
+def kill_port(port):
+    """Find and kill process on a specific port."""
+    try:
+        # Find PID using lsof
+        output = subprocess.check_output(["lsof", "-t", "-i", f":{port}"]).strip().decode()
+        if output:
+            pids = output.split()
+            print(f"⚠️  Port {port} is in use by PIDs {', '.join(pids)}. Killing them...")
+            for pid in pids:
+                 subprocess.run(["kill", "-9", pid])
+            print(f"✅ PIDs {', '.join(pids)} killed.")
+            time.sleep(1) # Wait for port to retain
+    except subprocess.CalledProcessError:
+        pass # Port not in use
+
+def kill_celery():
+    """Kill running celery workers."""
+    try:
+        subprocess.run(["pkill", "-f", "celery"], check=False)
+        # print("🧹 Cleaned up old Celery processes.")
+    except Exception:
+        pass
+
+def handle_sigterm(*args):
+    """Handle SIGTERM signal to trigger cleanup."""
+    raise KeyboardInterrupt()
+
 def run_services():
+    # Register signal handler for proper shutdown on docker/IDE stop
+    signal.signal(signal.SIGTERM, handle_sigterm)
+
+    # Cleanup before starting
+    print("🧹 Cleaning up existing processes...")
+    kill_port(8000)
+    kill_celery()
+
     # Determine the directory where this script is located
     backend_dir = os.path.dirname(os.path.abspath(__file__))
     
@@ -13,54 +50,55 @@ def run_services():
     env["PYTHONPATH"] = parent_dir + os.pathsep + env.get("PYTHONPATH", "")
 
     # Define commands
-    # We are in 'backend/' directory.
-    # PYTHONPATH includes '.../Logistics Distribution Route Optimization System' (parent of backend)
-    # So we can import 'backend.app.main'.
     uvicorn_cmd = [sys.executable, "-m", "uvicorn", "backend.app.main:app", "--app-dir", "..", "--reload"]
     celery_cmd = [sys.executable, "-m", "celery", "-A", "backend.app.worker", "worker", "--loglevel=info"]
     
     print(f"🚀 Starting Backend Services...")
     print(f"📂 Working Directory: {backend_dir}")
-    print(f"🐍 Python Executable: {sys.executable}")
-    print(f"🔧 Python Prefix: {sys.prefix}")
     
     # Check if we are potentially running in the wrong environment
     if "backend" not in os.path.abspath(sys.prefix).lower() and "uv" not in os.path.abspath(sys.prefix).lower():
          print("⚠️  WARNING: It looks like you might not be running in the project's uv environment.")
          print("    Please ensure you ran 'uv sync' and are using 'uv run python run_dev.py'.")
 
-    # Define commands
+    processes = []
     try:
         # Start Uvicorn
         print("Starting FastAPI (Uvicorn)...")
         uvicorn_process = subprocess.Popen(uvicorn_cmd, cwd=backend_dir, env=env)
+        processes.append(uvicorn_process)
         
         # Start Celery
         print("Starting Celery Worker...")
         celery_process = subprocess.Popen(celery_cmd, cwd=backend_dir, env=env)
+        processes.append(celery_process)
         
         print("\n✅ Services started! Press Ctrl+C to stop both.\n")
         
-        # Wait for both processes
-        uvicorn_process.wait()
-        celery_process.wait()
+        # Wait for processes
+        for p in processes:
+            p.wait()
         
     except KeyboardInterrupt:
         print("\n🛑 Stopping services...")
-        # Terminate processes on Ctrl+C
-        if 'uvicorn_process' in locals():
-            uvicorn_process.terminate()
-        if 'celery_process' in locals():
-            celery_process.terminate()
-        print("✅ Services stopped.")
-        sys.exit(0)
     except Exception as e:
         print(f"❌ Error occurred: {e}")
-        if 'uvicorn_process' in locals():
-            uvicorn_process.kill()
-        if 'celery_process' in locals():
-            celery_process.kill()
-        sys.exit(1)
+    finally:
+        # Terminate processes on exit
+        print("🧹 Cleaning up...")
+        for p in processes:
+            if p.poll() is None: # If still running
+                p.terminate()
+                try:
+                    p.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+        
+        # Force cleanup ports and celery again to be sure
+        kill_port(8000)
+        kill_celery()
+        print("✅ Services stopped cleanly.")
+        sys.exit(0)
 
 if __name__ == "__main__":
     run_services()

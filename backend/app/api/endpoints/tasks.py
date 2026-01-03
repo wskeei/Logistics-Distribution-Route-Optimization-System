@@ -7,7 +7,7 @@ from ...db.session import get_db
 from ...schemas import all_schemas as schemas
 from ...models import sql_models as models
 from ...api import deps
-from ...services.optimization import solve_vrp, Location, GeneticAlgorithm
+from ...services.optimization import VRPSolver, Location
 from ...services import ors
 
 router = APIRouter()
@@ -51,30 +51,41 @@ def create_and_optimize_cvrp_task(
 
     # 4. 准备用于优化的地点列表
     depot_location = Location(id=depot.id, x=depot.x, y=depot.y, demand=0)
+    
+    # We map Order -> Location. ID will be order.id
     customer_locations = [
-        Location(id=order.customer.id, x=order.customer.x, y=order.customer.y, demand=order.demand)
+        Location(id=order.id, x=order.customer.x, y=order.customer.y, demand=order.demand)
         for order in orders
     ]
     locations_for_optimization = [depot_location] + customer_locations
 
-    # 5. 执行遗传算法优化
-    ga = GeneticAlgorithm(
-        locations=locations_for_optimization,
-        vehicle_capacity=vehicle.capacity,
-        population_size=100,
-        mutation_rate=0.02,
-        crossover_rate=0.9,
-        generations=1000,
-        patience=100
-    )
-    best_chromosome = ga.run()
+    # 5. 执行 OR-Tools 优化
+    # Currently only supporting 1 vehicle in this specific endpoint logic?
+    # The input `task_create` has `vehicle_id`.
+    # But `VRPSolver` expects a list of vehicles.
+    # We will provide just this one vehicle.
+    vehicle_data = [{'id': vehicle.id, 'capacity': vehicle.capacity}]
+    
+    solver = VRPSolver(locations=locations_for_optimization, vehicles=vehicle_data)
+    result = solver.solve()
+    
+    # Since we only passed 1 vehicle, we expect at most 1 route result if it fits?
+    # Or multiple if it splits? OR-Tools with 1 vehicle might fail if demand > capacity.
+    # But let's assume valid or best effort.
+    
+    if not result.routes:
+         raise HTTPException(status_code=400, detail="Optimization failed to generate a route. Capacity might be exceeded.")
+
+    # We take the first (and likely only) route
+    route_res = result.routes[0]
 
     # 6. 创建主任务记录
     db_task = models.Task(
         depot_id=task_create.depot_id,
         vehicle_id=task_create.vehicle_id, # Main vehicle for the task
         status=models.TaskStatus.COMPLETED,
-        total_distance=best_chromosome.total_distance
+        total_distance=route_res.distance, # Use result distance
+        path_geometries=[route_res.geometry] if route_res.geometry else []
     )
     db.add(db_task)
     db.commit()
@@ -82,12 +93,22 @@ def create_and_optimize_cvrp_task(
 
     # 7. 保存多条路径的站点顺序
     stop_counter = 1
-    for route in best_chromosome.routes:
-        for customer_loc in route:
-            if customer_loc.id == depot.id: continue # Skip depot
+    # route_res.route_path contains Locations.
+    # Locations ID is order.id as per our preparation above.
+    
+    # Map order.id back to customer_id for TaskStop?
+    # TaskStop needs customer_id.
+    # We have orders loaded.
+    order_map = {o.id: o for o in orders}
+    
+    for loc in route_res.route_path:
+        if loc.id == depot.id: continue # Skip depot (id match check)
+        
+        order_obj = order_map.get(loc.id)
+        if order_obj:
             task_stop = models.TaskStop(
                 task_id=db_task.id,
-                customer_id=customer_loc.id,
+                customer_id=order_obj.customer_id,
                 stop_order=stop_counter
             )
             db.add(task_stop)
