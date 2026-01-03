@@ -167,35 +167,60 @@ const drawPath = () => {
         }
       }
 
-      // 2. Fallback: Draw straight lines using routes (Euclidean / Fallback)
-      if (!drawn && props.task.routes && props.task.routes.length > 0 && props.task.stops) {
-          console.log("No detailed geometry found. Drawing straight lines...");
-          // We need to map global customer IDs to their coordinates
-          const locationMap = {};
-          props.locations.forEach(loc => { locationMap[loc.id] = loc; });
-          
-          // Also need to know where the depot is. Usually route starts/ends with depot.
-          // In the props.task.routes (which are just lists of IDs [depot, c1, c2, ...]), we can map them to coords.
-          
-          props.task.routes.forEach(route => {
-              const routeCoords = [];
-              route.forEach(locId => {
-                  const loc = locationMap[locId];
-                  if (loc) {
-                      routeCoords.push([loc.y, loc.x]);
-                  }
-              });
+      // 2. Fallback: Draw straight lines using routes OR stops
+      if (!drawn) {
+        console.log("No detailed geometry found. Drawing straight lines...");
+        const locationMap = {};
+        props.locations.forEach(loc => { locationMap[loc.id] = loc; });
 
-              if (routeCoords.length > 1) {
-                   antPath(routeCoords, {
+        // Helper to draw a single route path
+        const drawRouteLine = (coords) => {
+             if (coords.length > 1) {
+                   antPath(coords, {
                       delay: 800,
                       dashArray: [10, 20],
                       weight: 4,
                       color: "#FF8800", // Use orange for fallback/straight lines
                       pulseColor: "#FFFFFF",
                   }).addTo(pathLayer.value);
-              }
-          });
+             }
+        }
+
+        if (props.task.routes && props.task.routes.length > 0) {
+            // Case A: attributes 'routes' (list of IDs) is provided
+             props.task.routes.forEach(route => {
+                  const routeCoords = [];
+                  route.forEach(locId => {
+                      const loc = locationMap[locId];
+                      if (loc) routeCoords.push([loc.y, loc.x]);
+                  });
+                  drawRouteLine(routeCoords);
+              });
+        } else if (props.task.stops && props.task.stops.length > 0) {
+             // Case B: Only 'stops' are provided. Construct route: Depot -> Stops -> Depot
+             // Find depot in locations
+             const depotLoc = props.locations.find(l => l.type === 'depot');
+             const routeCoords = [];
+             
+             if (depotLoc) routeCoords.push([depotLoc.y, depotLoc.x]);
+             
+             // Stops are assumed to be sorted by stop_order
+             const sortedStops = [...props.task.stops].sort((a,b) => a.stop_order - b.stop_order);
+             sortedStops.forEach(stop => {
+                 // Stop might contain student/customer obj with x/y directly, OR use customer_id to look up in locations
+                 // Checking schema: TaskStop has 'customer'.
+                 if (stop.customer && stop.customer.x && stop.customer.y) {
+                      routeCoords.push([stop.customer.y, stop.customer.x]);
+                 } else if (stop.customer_id && locationMap[stop.customer_id]) {
+                      const loc = locationMap[stop.customer_id];
+                      routeCoords.push([loc.y, loc.x]);
+                 }
+             });
+
+             if (depotLoc) routeCoords.push([depotLoc.y, depotLoc.x]); // Return to depot
+             
+             drawRouteLine(routeCoords);
+        }
       }
 
       // 绘制站点序号标记

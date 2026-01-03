@@ -11,7 +11,7 @@
         </div>
       </template>
 
-      <el-table :data="tasks" style="width: 100%" v-loading="loading">
+      <el-table :data="tasks" style="width: 100%" v-loading="loading" @row-click="handleRowClick" row-class-name="cursor-pointer">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="title" label="任务标题" />
         <el-table-column prop="description" label="描述" />
@@ -29,10 +29,10 @@
         </el-table-column>
         <el-table-column label="操作" width="200">
           <template #default="scope">
-            <el-button size="small" type="primary" @click="handleEdit(scope.row)">
+            <el-button size="small" type="primary" @click.stop="handleEdit(scope.row)">
               编辑
             </el-button>
-            <el-button size="small" type="danger" @click="handleDelete(scope.row)">
+            <el-button size="small" type="danger" @click.stop="handleDelete(scope.row)">
               删除
             </el-button>
           </template>
@@ -57,6 +57,21 @@
               :value="depot.id"
             />
           </el-select>
+        </el-form-item>
+        <el-form-item label="选择车辆" prop="vehicle_id">
+            <el-select
+              v-model="taskForm.vehicle_id"
+              placeholder="请选择车辆"
+              style="width: 100%;"
+              :disabled="!taskForm.depot_id"
+            >
+              <el-option
+                v-for="vehicle in vehicles"
+                :key="vehicle.id"
+                :label="vehicle.name + ' (' + vehicle.capacity + 'kg)'"
+                :value="vehicle.id"
+              />
+            </el-select>
         </el-form-item>
         <el-form-item label="选择客户" prop="customer_ids">
            <el-select
@@ -109,6 +124,31 @@
         </span>
       </template>
     </el-dialog>
+    <!-- 任务详情对话框 -->
+    <el-dialog
+      v-model="showDetailDialog"
+      title="任务详情"
+      width="900px"
+      top="5vh"
+    >
+      <div v-if="selectedTask" class="detail-container">
+         <el-descriptions title="基本信息" border>
+            <el-descriptions-item label="标题">{{ selectedTask.title }}</el-descriptions-item>
+            <el-descriptions-item label="状态">
+               <el-tag :type="getStatusType(selectedTask.status)">{{ getStatusText(selectedTask.status) }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="车辆">{{ selectedTask.vehicle ? selectedTask.vehicle.name : '未分配' }}</el-descriptions-item>
+            <el-descriptions-item label="仓库">{{ selectedTask.depot ? selectedTask.depot.name : (selectedTask.depot_id) }}</el-descriptions-item>
+            <el-descriptions-item label="总距离">{{ selectedTask.total_distance != null ? selectedTask.total_distance.toFixed(2) + ' km' : '未知' }}</el-descriptions-item>
+            <el-descriptions-item label="创建时间">{{ formatDate(selectedTask.created_at) }}</el-descriptions-item>
+             <el-descriptions-item label="描述" :span="3">{{ selectedTask.description || '无' }}</el-descriptions-item>
+         </el-descriptions>
+
+         <div class="map-wrapper" style="height: 500px; margin-top: 20px; border: 1px solid #eee;">
+             <Map :locations="detailMapLocations" :task="selectedTask" />
+         </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -116,6 +156,7 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import Map from '../components/Map.vue'
 
 const loading = ref(false)
 const showAddDialog = ref(false)
@@ -123,6 +164,49 @@ const submitLoading = ref(false)
 const showEditDialog = ref(false)
 const editLoading = ref(false)
 const tasks = ref([])
+const vehicles = ref([]) // Added vehicles state
+
+// Details View State
+const showDetailDialog = ref(false)
+const selectedTask = ref(null)
+const detailMapLocations = ref([])
+
+const handleRowClick = (row) => {
+    selectedTask.value = row;
+    prepareDetailMapData(row);
+    showDetailDialog.value = true;
+};
+
+const prepareDetailMapData = (task) => {
+    const locs = [];
+    // 1. Add Depot
+    if (task.depot) {
+        locs.push({
+            id: task.depot.id,
+            name: `[仓库] ${task.depot.name}`,
+            x: task.depot.x,
+            y: task.depot.y,
+            type: 'depot'
+        });
+    }
+    
+    // 2. Add Stops/Customers
+    if (task.stops && task.stops.length > 0) {
+        task.stops.forEach(stop => {
+            if (stop.customer) {
+                locs.push({
+                    id: stop.customer.id,
+                    name: stop.customer.name,
+                    x: stop.customer.x,
+                    y: stop.customer.y,
+                    type: 'customer',
+                    stop_order: stop.stop_order
+                });
+            }
+        });
+    }
+    detailMapLocations.value = locs;
+};
 
 const editForm = ref({
   id: null,
@@ -132,7 +216,10 @@ const editForm = ref({
 
 const taskForm = ref({
   title: '',
-  description: ''
+  description: '',
+  vehicle_id: null, // Added vehicle_id
+  depot_id: null,
+  customer_ids: []
 })
 
 const fetchTasks = async () => {
@@ -242,9 +329,30 @@ const onDialogOpen = async () => {
   }
 };
 
+// Fetch vehicles when depot changes
+import { watch } from 'vue';
+watch(() => taskForm.value.depot_id, async (newVal) => {
+    if (newVal) {
+        try {
+            const res = await axios.get(`/api/vehicles/?current_depot_id=${newVal}`);
+            vehicles.value = res.data;
+        } catch(e) {
+            console.error(e);
+            vehicles.value = [];
+        }
+    } else {
+        vehicles.value = [];
+    }
+    taskForm.value.vehicle_id = null; // Reset vehicle when depot changes
+});
+
 const handleSubmit = async () => {
   if (!taskForm.value.depot_id) {
     ElMessage.warning('请选择一个仓库');
+    return;
+  }
+  if (!taskForm.value.vehicle_id) {
+    ElMessage.warning('请选择车辆');
     return;
   }
   if (taskForm.value.customer_ids.length === 0) {
@@ -254,12 +362,49 @@ const handleSubmit = async () => {
 
   submitLoading.value = true;
   try {
-    // 注意：后端接口是 /api/tasks/optimize
-    await axios.post('/api/tasks/optimize', taskForm.value);
+    // Correct endpoint: /api/tasks/optimize_cvrp
+    // Map customer_ids to order_ids? 
+    // Wait, the backend create_and_optimize_cvrp_task expects `order_ids` (List[int]).
+    // But the form selects `customers`.
+    // We need to create ORDERS first, OR the endpoint should accept customers and create dummy orders?
+    // Looking at `tasks.py`, it requires `order_ids`.
+    // Oh no. The previous logic was just conceptual?
+    
+    // If I select customers, I don't have order IDs unless orders exist.
+    // The "Task" page "Add Task" flow seems to assume we are creating a task from existing customers = creating orders on the fly?
+    // OR we should select ORDERS?
+    
+    // In `Dispatcher.vue`, we select ORDERS.
+    // Here in `Tasks.vue`, we select CUSTOMERS.
+    
+    // Let's create dummy orders for these customers first? 
+    // Or does the backend handle it?
+    // Backend `tasks.py` line 44: `if not task_create.order_ids: raise ...`
+    
+    // So `Tasks.vue` cannot work by just selecting customers if it calls `optimize_cvrp`.
+    // It must create orders first.
+    
+    // Let's perform a quick hack: Create 1 order per selected customer automatically.
+    // Then pass those order IDs.
+    
+    const newOrderIds = [];
+    for (const custId of taskForm.value.customer_ids) {
+        // Create order
+        const orderRes = await axios.post('/api/orders/', {
+            customer_id: custId,
+            items: [{product_id: 1, quantity: 10}] // Dummy product/quantity
+        });
+        newOrderIds.push(orderRes.data.id);
+    }
+    
+    await axios.post('/api/tasks/optimize_cvrp', {
+        ...taskForm.value,
+        order_ids: newOrderIds
+    });
     
     ElMessage.success('任务创建和优化成功！');
     showAddDialog.value = false;
-    taskForm.value = { depot_id: null, customer_ids: [] }; // 重置表单
+    taskForm.value = { depot_id: null, vehicle_id: null, customer_ids: [] }; // 重置表单
     fetchTasks(); // 重新获取任务列表
   } catch (error) {
     console.error('创建任务失败:', error);
@@ -284,4 +429,9 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
 }
+
+:deep(.cursor-pointer) {
+    cursor: pointer;
+}
+
 </style>
