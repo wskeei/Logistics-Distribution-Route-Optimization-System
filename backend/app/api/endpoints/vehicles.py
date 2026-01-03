@@ -13,10 +13,14 @@ router = APIRouter()
 def read_vehicles(
     skip: int = 0,
     limit: int = 100,
+    current_depot_id: int = None,
     db: Session = Depends(get_db),
-    current_user: schemas.User = Depends(deps.get_current_user)
+    current_user: models.User = Depends(deps.get_current_user)
 ):
-    vehicles = db.query(models.Vehicle).offset(skip).limit(limit).all()
+    query = db.query(models.Vehicle)
+    if current_depot_id is not None:
+        query = query.filter(models.Vehicle.current_depot_id == current_depot_id)
+    vehicles = query.offset(skip).limit(limit).all()
     return vehicles
 
 @router.post("/", response_model=schemas.Vehicle)

@@ -137,15 +137,31 @@ const fetchData = async (url) => {
   return response.json();
 };
 
+const watchDepotChange = async (newVal) => {
+  if (newVal) {
+     try {
+         // Fetch vehicles for this depot
+         vehicles.value = await fetchData(`/api/vehicles/?current_depot_id=${newVal}`);
+     } catch (e) {
+         ElMessage.error("获取该仓库车辆失败");
+         vehicles.value = [];
+     }
+  } else {
+      vehicles.value = [];
+  }
+};
+
+import { watch } from 'vue';
+watch(selectedDepot, watchDepotChange);
+
 onMounted(async () => {
   try {
-    const [allOrders, allVehicles, allDepots] = await Promise.all([
+    const [allOrders, allDepots] = await Promise.all([
       fetchData('/api/orders/'),
-      fetchData('/api/vehicles/'),
       fetchData('/api/depots/'),
     ]);
     pendingOrders.value = allOrders.filter(o => o.status === 'PENDING');
-    vehicles.value = allVehicles;
+    // vehicles.value = allVehicles; // Removed initial fetch
     depots.value = allDepots;
     
     // Set default title
