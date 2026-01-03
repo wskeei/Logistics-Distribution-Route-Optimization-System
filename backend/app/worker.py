@@ -33,11 +33,56 @@ def run_dispatch_task(self, dispatch_request_data: dict):
         # Prepare Data for Solver
         print(f"Preparing data for {len(orders)} orders and {len(vehicles)} vehicles...")
         
-        depot_loc = Location(id=depot.id, x=depot.x, y=depot.y, demand=0)
-        customer_locs = [Location(id=o.customer.id, x=o.customer.x, y=o.customer.y, demand=o.demand) for o in orders]
+        # Prepare Data for Solver
+        print(f"Preparing data for {len(orders)} orders and {len(vehicles)} vehicles...")
+        
+        # 1. Main Dispatch Depot (Node 0)
+        depot_loc = Location(id=0, x=depot.x, y=depot.y, demand=0) 
+        
+        # 2. Customers (Nodes 1..N)
+        # Map Order ID -> Location
+        order_map = {o.id: o for o in orders}
+        customer_locs = [Location(id=o.id, x=o.customer.x, y=o.customer.y, demand=o.demand) for o in orders]
+        
         all_locations = [depot_loc] + customer_locs
         
-        vehicle_data = [{'id': v.id, 'capacity': v.capacity} for v in vehicles]
+        # 3. Vehicle Start Locations (Nodes N+1..M)
+        # We need to identify unique start locations for vehicles (their current depots).
+        # If current_depot == dispatch_depot, index is 0.
+        # Else, we add new location node.
+        
+        # Helper to find existing location index or add new one
+        # Using a coordinate-based key or depot ID key? ID is safer.
+        # But Location.id logic in optimization usually ignored except for result mapping.
+        # We use internal list index for solver.
+        
+        # Let's verify existing locations to avoid dupes?
+        # Actually, simpler: Just maintain a map of DepotID -> List Index.
+        depot_to_index = {depot.id: 0} # Dispatch depot is always index 0
+        
+        vehicle_data = []
+        for v in vehicles:
+            v_depot_id = v.current_depot_id if v.current_depot_id else depot.id
+            
+            if v_depot_id not in depot_to_index:
+                # Need to load this depot info. 
+                # Since we didn't query it yet, we might need to fetch or use relationship if eager loaded.
+                # v.current_depot is relationship.
+                if v.current_depot:
+                    new_loc = Location(id=v_depot_id * -1, x=v.current_depot.x, y=v.current_depot.y, demand=0) # Negative ID for other depots to distinguish?
+                    all_locations.append(new_loc)
+                    depot_to_index[v_depot_id] = len(all_locations) - 1
+                else:
+                    # Fallback to Node 0 if data missing
+                    depot_to_index[v_depot_id] = 0
+            
+            start_idx = depot_to_index[v_depot_id]
+            vehicle_data.append({
+                'id': v.id, 
+                'capacity': v.capacity,
+                'start_index': start_idx,
+                'end_index': start_idx # Return to same base
+            })
 
         self.update_state(state='PROGRESS', meta={'status': 'Running Optimization (OR-Tools)...'})
         print("Running Optimization...")
@@ -45,53 +90,6 @@ def run_dispatch_task(self, dispatch_request_data: dict):
         solver = VRPSolver(locations=all_locations, vehicles=vehicle_data)
         result = solver.solve()
         
-        print(f"Optimization complete. Total Distance: {result.total_distance}")
-
-        # Save Results
-        self.update_state(state='PROGRESS', meta={'status': 'Saving tasks...'})
-        created_tasks_ids = []
-        
-        # Determine actual order objects map for quick lookup
-        # Map location_id -> Order object (Note: location_id was customer_id)
-        # We need to link back Location ID to Order ID.
-        # Issue: Multiple orders might have same customer? 
-        # In current seed, 1 order per customer usually. 
-        # let's map customer_id -> list of orders? 
-        # Actually logic: Location(id=customer.id). 
-        # So we map customer_id -> order.
-        
-        # What if multiple orders for same customer? 
-        # The input was `orders`.
-        # `customer_locs` used `o.customer.id`.
-        # If multiple orders share a customer, we passed duplicate locations with same ID?
-        # OR-Tools handles duplicate nodes fine? No, usually IDs must be unique or handled carefully.
-        # But `optimization.py` uses list index. `Location.id` is just meta.
-        # So it works.
-        
-        # Mapping back:
-        # We have `route_path` containing Locations.
-        # We need to know which Order corresponds to that Location.
-        # Since we flattened orders into `customer_locs` by order index, 
-        # we generally need a way to track which order it was.
-        # But `Location` struct has `id`.
-        # If we use `o.id` instead of `o.customer.id` for Location ID, it's safer.
-        # Let's fix that in the prep code below.
-        
-        # Map Order ID to Order Object for easy lookup
-        # We use order.id as Location.id to prevent confusion (since multiple orders can be at same customer/location)
-        # NOTE: Location.id in optimization.py is just an integer ID. 
-        # We will use order.id for locations representing orders.
-        order_map = {o.id: o for o in orders}
-        
-        # Redefine locations with order.id
-        depot_loc = Location(id=0, x=depot.x, y=depot.y, demand=0) # ID 0 for depot
-        customer_locs = [Location(id=o.id, x=o.customer.x, y=o.customer.y, demand=o.demand) for o in orders]
-        all_locations = [depot_loc] + customer_locs
-
-        # Re-initialize solver with correct IDs
-        solver = VRPSolver(locations=all_locations, vehicles=vehicle_data)
-        result = solver.solve()
-
         print(f"Optimization complete. Total Distance: {result.total_distance}")
 
         # Save Results

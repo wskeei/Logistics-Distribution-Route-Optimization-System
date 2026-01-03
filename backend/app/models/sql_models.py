@@ -36,6 +36,9 @@ class Vehicle(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
     capacity = Column(Float, default=100.0) # Example: capacity in kg or m^3
+    current_depot_id = Column(Integer, ForeignKey("depots.id"), nullable=True) # The depot where the vehicle is currently stationed
+    
+    current_depot = relationship("Depot")
 
 class TaskStatus(enum.Enum):
     PENDING = "PENDING"

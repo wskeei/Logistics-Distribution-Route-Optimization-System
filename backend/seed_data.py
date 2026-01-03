@@ -45,6 +45,7 @@ def seed_data():
             ("西安", 108.9398, 34.3416, ["雁塔配送", "未央物流"])
         ]
         
+        depot_instances = []
         depot_list = []
         for city, bx, by, districts in major_cities:
             for district in districts:
@@ -59,6 +60,9 @@ def seed_data():
                 )
                 db.add(depot)
                 depot_list.append((city, bx, by)) # Keep track for customer generation
+                depot_instances.append(depot)
+        
+        db.flush() # Get IDs for depots
 
         # 3. Seed Vehicles (Need 20+)
         print("Creating fleet...")
@@ -73,9 +77,11 @@ def seed_data():
         
         for i in range(1, 41):  # Increased to ~40
             v_type = random.choice(vehicle_types)
+            assigned_depot = random.choice(depot_instances)
             v = models.Vehicle(
                 name=f"{v_type[0]} {i:03d}号",
-                capacity=v_type[1]
+                capacity=v_type[1],
+                current_depot_id=assigned_depot.id
             )
             db.add(v)
 

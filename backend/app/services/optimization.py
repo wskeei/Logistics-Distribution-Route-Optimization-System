@@ -38,8 +38,29 @@ class VRPSolver:
         """
         self.locations = locations
         self.vehicles = vehicles
-        self.depot = locations[0]
         self.num_vehicles = len(vehicles)
+        # Prepare distance matrix
+        self.distance_matrix = self._compute_distance_matrix()
+        
+        # Prepare lists for start and end nodes
+        # If 'start_index' is in vehicle dict, use it. Else default to 0 (Depot).
+        # We assume vehicles return to their start node (Round Trip).
+        # You can change ends to [0]*len(vehicles) if they must return to central depot,
+        # or different logic. Here assuming return to base.
+        self.starts = [v.get('start_index', 0) for v in self.vehicles]
+        self.ends = [v.get('end_index', v.get('start_index', 0)) for v in self.vehicles]
+
+        # debug
+        print(f"Vehicle Starts: {self.starts}")
+
+        # Create Routing Index Manager with custom starts/ends
+        self.manager = pywrapcp.RoutingIndexManager(
+            len(self.locations), 
+            len(self.vehicles), 
+            self.starts, 
+            self.ends
+        )
+        self.routing = pywrapcp.RoutingModel(self.manager)
         
         # Scaling factor to convert float coordinates/demands to integers for OR-Tools
         self.dist_scale = 1000 # 1km = 1000 units
@@ -178,22 +199,13 @@ class VRPSolver:
                 index = solution.Value(routing.NextVar(index))
                 route_distance += routing.GetArcCostForVehicle(previous_index, index, vehicle_id)
 
-            # Add end node (depot) only if route has customers
-            if len(route_nodes) > 1: # >1 means Depot + at least 1 customer
-                 # Append depot at end for closed loop
-                 # node_index = manager.IndexToNode(index) # This is end node
-                 # route_nodes.append(self.locations[node_index]) # Often same as depot
+            # Add end node (home depot)
+            if len(route_nodes) > 0: 
+                 # The loop ends when IsEnd(index) is true, so 'index' is the end node.
+                 node_index = manager.IndexToNode(index)
+                 route_nodes.append(self.locations[node_index])
                  
-                 # Let's clean up logic:
-                 # route_nodes currently: [Depot, C1, C2...]
-                 # We need to explicitly add Depot at the end? 
-                 # OR-Tools "End" node is virtual.
-                 # Let's just append the depot object manually to close the loop.
-                 route_nodes.append(self.depot)
-
-                 dist_km = route_distance / 1000.0 # Convert back to meters or km? The matrix was meters.
-                 # Actually matrix was from _haversine * 1000 so it is Meters.
-                 # Let's keep it as meters.
+                 dist_km = route_distance / 1000.0 # meters
                  
                  # Fetch Geometry from ORS only for this final route
                  geometry = self._fetch_route_geometry(route_nodes)
