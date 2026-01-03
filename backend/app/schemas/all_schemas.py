@@ -79,6 +79,8 @@ class VehicleUpdate(BaseModel):
 
 class Vehicle(VehicleBase):
     id: int
+    current_depot_id: Optional[int] = None
+    current_depot: Optional[Depot] = None
 
     class Config:
         from_attributes = True

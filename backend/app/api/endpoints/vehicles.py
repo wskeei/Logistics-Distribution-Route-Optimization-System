@@ -14,12 +14,16 @@ def read_vehicles(
     skip: int = 0,
     limit: int = 100,
     current_depot_id: int = None,
+    min_capacity: float = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(deps.get_current_user)
 ):
     query = db.query(models.Vehicle)
     if current_depot_id is not None:
         query = query.filter(models.Vehicle.current_depot_id == current_depot_id)
+    if min_capacity is not None:
+        query = query.filter(models.Vehicle.capacity >= min_capacity)
+    
     vehicles = query.offset(skip).limit(limit).all()
     return vehicles
 
