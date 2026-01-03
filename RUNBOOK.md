@@ -14,8 +14,8 @@
 
 在开始之前，请确保您的系统上安装了以下软件：
 
-- **Conda**: 用于管理 Python 环境。您可以从 [Anaconda官网](https://www.anaconda.com/products/distribution) 下载并安装。
-- **Python**: Conda 会在创建环境时自动为您安装。
+- **uv**: 用于极速管理的 Python 包管理器。
+- **Python**: uv 会自动为您管理 Python 版本。
 - **Node.js**: 推荐版本 18.x (LTS) 或更高。
 - **Git**: 用于克隆项目代码。
 
@@ -51,28 +51,26 @@ brew services start redis
     cd /path/to/Logistics-Distribution-Route-Optimization-System
     ```
 
-2.  **创建并激活 Conda 虚拟环境**
-    我们建议使用 Python 3.9。
+2.  **设置 uv 项目环境**
     ```bash
-    conda create --name route python=3.9 -y
-    conda activate route
+    # 在 backend 目录初始化并安装依赖
+    cd backend
+    uv sync
     ```
 
 3.  **安装后端依赖**
-    ```bash
-    pip install -r backend/requirements.txt
-    ```
+    依赖已通过 `uv sync` 安装完成。
 
 4.  **启动 Celery Worker (需要新开一个终端)**
-    - 确保您处于项目根目录并且虚拟环境已激活。
+    - 确保您处于 `backend` 目录。
     ```bash
-    celery -A backend.celery_worker worker --loglevel=info
+    uv run celery -A celery_worker worker --loglevel=info
     ```
 
 5.  **启动 FastAPI 应用 (需要再新开一个终端)**
-    - 确保您处于项目根目录并且虚拟环境已激活。
+    - 确保您处于 `backend` 目录。
     ```bash
-    uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+    uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
     ```
 
 ### 3.4. 设置和运行前端
@@ -125,28 +123,25 @@ brew services start redis
     cd C:\path\to\Logistics-Distribution-Route-Optimization-System
     ```
 
-2.  **创建并激活 Conda 虚拟环境**
-    我们建议使用 Python 3.9。
+2.  **设置 uv 项目环境**
     ```cmd
-    conda create --name route python=3.9 -y
-    conda activate route
+    cd backend
+    uv sync
     ```
 
 3.  **安装后端依赖**
-    ```cmd
-    pip install -r backend\requirements.txt
-    ```
+    依赖已通过 `uv sync` 安装完成。
 
 4.  **启动 Celery Worker (需要新开一个终端)**
-    - 确保您处于项目根目录并且虚拟环境已激活。
+    - 确保您处于 `backend` 目录。
     ```cmd
-    celery -A backend.celery_worker worker --loglevel=info
+    uv run celery -A celery_worker worker --loglevel=info
     ```
 
 5.  **启动 FastAPI 应用 (需要再新开一个终端)**
-    - 确保您处于项目根目录并且虚拟环境已激活。
+    - 确保您处于 `backend` 目录。
     ```cmd
-    uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+    uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
     ```
 
 ### 4.4. 设置和运行前端

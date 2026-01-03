@@ -10,8 +10,8 @@ A comprehensive logistics solution featuring intelligent dispatching, CVRP path 
 
 ## 🚀 Quick Start
 
-1.  **Backend**: `uvicorn backend.main:app --reload`
-2.  **Worker**: `python -m celery -A backend.celery_worker worker --loglevel=info`
+1.  **Backend**: `cd backend && uv run uvicorn main:app --reload`
+2.  **Worker**: `cd backend && uv run celery -A celery_worker worker --loglevel=info`
 3.  **Frontend**: `npm run dev` (in `frontend/logistics-app`)
 4.  **Redis**: Ensure Redis service is running.
 
