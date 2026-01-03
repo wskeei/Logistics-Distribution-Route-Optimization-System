@@ -72,11 +72,11 @@ const stats = computed(() => [
 
 const actions = [
   { 
-    title: '路径规划', 
+    title: '调度中心', 
     desc: '智能优化配送路线', 
     icon: 'Location', 
     color: 'blue',
-    handler: () => router.push('/planning')
+    handler: () => router.push('/dispatcher')
   },
   { 
     title: '客户管理', 
