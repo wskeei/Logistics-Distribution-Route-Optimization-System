@@ -46,14 +46,15 @@ uv sync
 
 ### 2. 配置环境变量
 
-复制 `.env.example` (如有) 或直接创建 `.env` 文件：
+在项目根目录创建 `.env`（推荐）或在 `backend/` 目录创建 `.env`：
 
 ```ini
 # .env
 ORS_API_KEY=your_openrouteservice_api_key
 SECRET_KEY=your_jwt_secret_key
-CELERY_BROKER_URL=redis://localhost:6379/0
-DATABASE_URL=sqlite:///./logistics.db
+# 当前代码中 Celery Redis 地址与数据库路径为代码内固定值：
+# Redis: redis://localhost:6379/0
+# SQLite: sqlite:///./logistics.db
 ```
 
 ### 3. 数据初始化 (可选)
@@ -68,8 +69,8 @@ uv run python seed_data.py
 
 **推荐方式 (同时启动 API 和 Worker)**:
 ```bash
-# 回退到根目录运行
-uv run python backend/run_dev.py
+cd backend
+uv run python run_dev.py
 ```
 
 **手动启动 (API Only)**:

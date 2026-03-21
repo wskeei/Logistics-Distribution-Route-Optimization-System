@@ -23,28 +23,29 @@
 ### 2. 后端部署 (API & Worker)
 
 #### 2.1 安装依赖
-推荐使用 `uv` 或 `pip` 安装生产依赖。
+推荐使用 `uv` 安装依赖（仓库包含 `uv.lock`）。
 
 ```bash
 cd backend
 uv sync --frozen  # 使用 lock 文件锁死版本
-# 或者
-pip install -r requirements.txt
 ```
 
-#### 2.2 启动 API 服务 (使用 Gunicorn 管理 Uvicorn)
-在生产环境中，建议使用 Gunicorn 作为进程管理器来启动 Uvicorn Worker。
+#### 2.2 启动 API 服务
+当前仓库默认依赖中不包含 `gunicorn`，可直接使用 `uvicorn` 启动：
 
 ```bash
-# 示例：启动 4 个 Worker
-gunicorn backend.app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+cd backend
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+
+如需使用 Gunicorn，请先额外安装后再启动。
 
 #### 2.3 启动 Celery Worker
-请确保 Redis 服务可访问，并在 `.env` 中配置了正确的 `CELERY_BROKER_URL`。
+请确保 Redis 服务可访问。当前代码里 Celery 使用固定地址 `redis://localhost:6379/0`（定义在 `backend/app/core/celery_app.py`）。
 
 ```bash
-celery -A backend.app.worker worker --loglevel=info
+cd backend
+PYTHONPATH=.. uv run celery -A backend.app.worker worker --loglevel=info
 # 建议配合 Supervisor 或 Systemd 进行进程守护
 ```
 
@@ -105,7 +106,7 @@ Windows 下 Celery 4.x+ 可能会遇到多进程兼容性问题，建议使用 `
 ```bash
 cd backend
 # Windows 推荐模式:
-uv run celery -A app.worker worker --loglevel=info --pool=solo
+PYTHONPATH=.. uv run celery -A backend.app.worker worker --loglevel=info --pool=solo
 ```
 
 #### 4. 前端
@@ -120,7 +121,7 @@ npm run dev
 
 | 问题现象 | 可能原因 | 解决方案 |
 | :--- | :--- | :--- |
-| **Redis Connection Error** | Redis 未启动或配置错误 | 检查 `backend/.env` 中的 `CELERY_BROKER_URL`，确保 Redis 端口开放 (默认 6379)。 |
+| **Redis Connection Error** | Redis 未启动或配置错误 | 检查 Redis 服务状态，确认 `localhost:6379` 可访问；当前 Celery 地址见 `backend/app/core/celery_app.py`。 |
 | **Celery 任务一直 Pending** | Worker 未启动 | 检查 Worker 终端是否有报错，Windows 下尝试添加 `--pool=solo` 参数。 |
-| **ModuleNotFoundError** | 运行路径错误 | 确保在项目根目录或正确的 `backend` 目录下运行命令，且 PYTHONPATH 包含了 `app` 包。 |
-| **ORS API Error** | Key 无效或超限 | 检查 `backend/.env` 中的 `ORS_API_KEY` 是否有效，每日配额是否用完。 |
+| **ModuleNotFoundError** | 运行路径错误 | 优先使用 README 推荐命令；手动启动 Celery 时使用 `PYTHONPATH=.. uv run celery -A backend.app.worker worker --loglevel=info`。 |
+| **ORS API Error** | Key 无效或超限 | 检查项目根目录 `.env`（或 `backend/.env`）中的 `ORS_API_KEY` 是否有效，每日配额是否用完。 |

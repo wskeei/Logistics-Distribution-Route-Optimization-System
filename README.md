@@ -71,6 +71,7 @@ uv sync
 # 2. 启动服务 (同时启动 API 和 Worker)
 uv run python run_dev.py
 ```
+> **重要提示**: 请先 `cd backend` 再执行启动命令。不要在仓库根目录直接运行 `uv run python backend/run_dev.py`，否则可能使用到错误的 Python 环境并出现依赖缺失。
 > **提示**: 脚本启动时会自动检查并清理占用 8000 端口的进程，无需手动 Kill。
 
 ### 4. 前端应用启动
